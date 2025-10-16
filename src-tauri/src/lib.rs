@@ -1,11 +1,11 @@
-use tauri::{
-    Manager,
-    menu::{MenuBuilder, MenuItemBuilder},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use std::fs;
 use std::path::PathBuf;
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager,
+};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -17,12 +17,12 @@ fn greet(name: &str) -> String {
 fn get_ytools_dir() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or("无法获取用户目录")?;
     let ytools_dir = home.join(".ytools");
-    
+
     // 确保目录存在
     if !ytools_dir.exists() {
         fs::create_dir_all(&ytools_dir).map_err(|e| format!("创建目录失败: {}", e))?;
     }
-    
+
     Ok(ytools_dir)
 }
 
@@ -31,12 +31,13 @@ fn get_ytools_dir() -> Result<PathBuf, String> {
 fn read_note(filename: String) -> Result<String, String> {
     let ytools_dir = get_ytools_dir()?;
     let file_path = ytools_dir.join(&filename);
-    
+
     if !file_path.exists() {
         return Ok(String::new());
     }
-    
-    fs::read_to_string(file_path).map_err(|e| format!("读取文件失败: {}", e))
+
+    let content = fs::read_to_string(&file_path).map_err(|e| format!("读取文件失败: {}", e))?;
+    Ok(content)
 }
 
 // 保存 markdown 文件
@@ -44,15 +45,16 @@ fn read_note(filename: String) -> Result<String, String> {
 fn save_note(filename: String, content: String) -> Result<(), String> {
     let ytools_dir = get_ytools_dir()?;
     let file_path = ytools_dir.join(&filename);
-    
-    fs::write(file_path, content).map_err(|e| format!("保存文件失败: {}", e))
+
+    fs::write(&file_path, content).map_err(|e| format!("保存文件失败: {}", e))?;
+    Ok(())
 }
 
 // 获取所有笔记文件列表
 #[tauri::command]
 fn list_notes() -> Result<Vec<String>, String> {
     let ytools_dir = get_ytools_dir()?;
-    
+
     let mut notes = Vec::new();
     if let Ok(entries) = fs::read_dir(ytools_dir) {
         for entry in entries.flatten() {
@@ -63,7 +65,7 @@ fn list_notes() -> Result<Vec<String>, String> {
             }
         }
     }
-    
+
     notes.sort();
     Ok(notes)
 }
@@ -131,8 +133,12 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
     let bc: Vec<char> = b.chars().collect();
     let n = ac.len();
     let m = bc.len();
-    if n == 0 { return m; }
-    if m == 0 { return n; }
+    if n == 0 {
+        return m;
+    }
+    if m == 0 {
+        return n;
+    }
 
     let mut prev: Vec<usize> = (0..=m).collect();
     let mut curr: Vec<usize> = vec![0; m + 1];
@@ -153,17 +159,17 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 #[tauri::command]
 fn search_workspaces(query: String) -> Result<Vec<String>, String> {
     let workspace_dir = PathBuf::from("D:\\workspaces");
-    
+
     if !workspace_dir.exists() {
         return Ok(Vec::new());
     }
-    
+
     // 当查询为空时，直接返回全部目录（维持现有行为）
     let query_lower = query.to_lowercase();
     let query_norm = normalize(&query_lower);
     let mut results = Vec::new();
     let mut all_dirs: Vec<String> = Vec::new();
-    
+
     if let Ok(entries) = fs::read_dir(workspace_dir) {
         for entry in entries.flatten() {
             if let Ok(metadata) = entry.metadata() {
@@ -187,7 +193,7 @@ fn search_workspaces(query: String) -> Result<Vec<String>, String> {
             }
         }
     }
-    
+
     // 如果包含匹配已经有结果，按字典序返回
     if !results.is_empty() || query.is_empty() {
         results.sort();
@@ -223,11 +229,11 @@ fn search_workspaces(query: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 fn open_folder(folder_name: String) -> Result<(), String> {
     let folder_path = PathBuf::from("D:\\workspaces").join(&folder_name);
-    
+
     if !folder_path.exists() {
         return Err(format!("文件夹不存在: {}", folder_name));
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
@@ -235,7 +241,7 @@ fn open_folder(folder_name: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
-    
+
     #[cfg(not(target_os = "windows"))]
     {
         std::process::Command::new("open")
@@ -243,7 +249,7 @@ fn open_folder(folder_name: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
-    
+
     Ok(())
 }
 
@@ -253,46 +259,47 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
-            greet, 
-            read_note, 
-            save_note, 
+            greet,
+            read_note,
+            save_note,
             list_notes,
             search_workspaces,
             open_folder
         ])
         .setup(|app| {
             // 创建托盘菜单
-            let show_hide = MenuItemBuilder::with_id("show_hide", "显示/隐藏窗口")
-                .build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "退出")
-                .build(app)?;
-            
-            let menu = MenuBuilder::new(app)
-                .items(&[&show_hide, &quit])
-                .build()?;
+            let show_hide = MenuItemBuilder::with_id("show_hide", "显示/隐藏窗口").build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+
+            let menu = MenuBuilder::new(app).items(&[&show_hide, &quit]).build()?;
 
             // 创建系统托盘图标
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| {
-                    match event.id().as_ref() {
-                        "show_hide" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show_hide" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            // 使用与快捷键相同的逻辑
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            let is_minimized = window.is_minimized().unwrap_or(false);
+
+                            if is_visible && !is_minimized {
+                                let _ = window.hide();
+                            } else {
+                                if is_minimized {
+                                    let _ = window.unminimize();
                                 }
+                                let _ = window.show();
+                                let _ = window.set_focus();
                             }
                         }
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        _ => {}
                     }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     // 处理托盘图标点击事件
@@ -304,10 +311,16 @@ pub fn run() {
                     {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) {
+                            // 使用与快捷键相同的逻辑
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            let is_minimized = window.is_minimized().unwrap_or(false);
+
+                            if is_visible && !is_minimized {
                                 let _ = window.hide();
                             } else {
-                                let _ = window.unminimize();
+                                if is_minimized {
+                                    let _ = window.unminimize();
+                                }
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
@@ -319,7 +332,7 @@ pub fn run() {
             // 设置全局快捷键
             let alt_space = Shortcut::new(Some(Modifiers::ALT), Code::Space);
             let ctrl_space = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
-            
+
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |app_handle, received_shortcut, event| {
@@ -327,10 +340,18 @@ pub fn run() {
                             // Alt+Space: 显示/隐藏主窗口
                             if received_shortcut == &alt_space {
                                 if let Some(window) = app_handle.get_webview_window("main") {
-                                    if window.is_visible().unwrap_or(false) {
+                                    // 更可靠的状态检查：同时检查可见性和是否最小化
+                                    let is_visible = window.is_visible().unwrap_or(false);
+                                    let is_minimized = window.is_minimized().unwrap_or(false);
+
+                                    if is_visible && !is_minimized {
+                                        // 窗口可见且未最小化，隐藏它
                                         let _ = window.hide();
                                     } else {
-                                        let _ = window.unminimize();
+                                        // 窗口不可见或最小化，显示它
+                                        if is_minimized {
+                                            let _ = window.unminimize();
+                                        }
                                         let _ = window.show();
                                         let _ = window.set_focus();
                                     }
@@ -338,7 +359,8 @@ pub fn run() {
                             }
                             // Ctrl+Space: 切换搜索窗口显示/隐藏
                             else if received_shortcut == &ctrl_space {
-                                if let Some(search_window) = app_handle.get_webview_window("search") {
+                                if let Some(search_window) = app_handle.get_webview_window("search")
+                                {
                                     // 搜索窗口已存在，切换显示状态
                                     if search_window.is_visible().unwrap_or(false) {
                                         let _ = search_window.hide();
@@ -349,39 +371,39 @@ pub fn run() {
                                 } else {
                                     // 搜索窗口不存在，创建它
                                     use tauri::WebviewWindowBuilder;
-                                    
+
                                     let result = if cfg!(debug_assertions) {
                                         // 开发模式：使用路由 /#/search
                                         WebviewWindowBuilder::new(
                                             app_handle,
                                             "search",
-                                            tauri::WebviewUrl::External("http://localhost:1420/#/search".parse().unwrap())
+                                            tauri::WebviewUrl::External(
+                                                "http://localhost:1420/#/search".parse().unwrap(),
+                                            ),
                                         )
                                     } else {
                                         // 生产模式：使用路由 /#/search
                                         WebviewWindowBuilder::new(
                                             app_handle,
                                             "search",
-                                            tauri::WebviewUrl::App("index.html#/search".into())
+                                            tauri::WebviewUrl::App("index.html#/search".into()),
                                         )
                                     }
                                     .title("搜索工作区")
                                     .inner_size(600.0, 400.0)
-                                    .decorations(false)     // 移除窗口装饰
+                                    .decorations(false) // 移除窗口装饰
                                     .always_on_top(true)
                                     .center()
                                     .resizable(false)
                                     .skip_taskbar(true)
                                     .visible(false)
-                                    .transparent(true)      // 设置窗口透明
-                                    .shadow(false)          // 移除窗口阴影和边框
+                                    .transparent(true) // 设置窗口透明
+                                    .shadow(false) // 移除窗口阴影和边框
                                     .build();
-                                    
+
                                     if let Ok(window) = result {
                                         let _ = window.show();
                                         let _ = window.set_focus();
-                                    } else {
-                                        eprintln!("❌ 创建搜索窗口失败");
                                     }
                                 }
                             }
@@ -389,27 +411,12 @@ pub fn run() {
                     })
                     .build(),
             )?;
-            
+
             // 注册 Alt+Space 快捷键
-            match app.global_shortcut().register(alt_space) {
-                Ok(_) => {
-                    println!("✅ 全局快捷键已注册: Alt+Space (显示/隐藏窗口)");
-                }
-                Err(e) => {
-                    eprintln!("⚠️  Alt+Space 注册失败: {}", e);
-                    eprintln!("   可使用托盘图标唤出窗口");
-                }
-            }
-            
+            let _ = app.global_shortcut().register(alt_space);
+
             // 注册 Ctrl+Space 快捷键
-            match app.global_shortcut().register(ctrl_space) {
-                Ok(_) => {
-                    println!("✅ 全局快捷键已注册: Ctrl+Space (搜索工作区)");
-                }
-                Err(e) => {
-                    eprintln!("⚠️  Ctrl+Space 注册失败: {}", e);
-                }
-            }
+            let _ = app.global_shortcut().register(ctrl_space);
 
             Ok(())
         })

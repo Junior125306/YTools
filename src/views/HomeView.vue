@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import TextEditor from '../components/TextEditor.vue';
+import InputDialog from '../components/InputDialog.vue';
 
 // 笔记列表和当前选中的笔记
 const notes = ref<string[]>([]);
@@ -8,9 +11,21 @@ const activeNote = ref<string>('notes.md');
 const content = ref<string>('');
 const isSaving = ref(false);
 const saveStatus = ref<string>('');
-const isMdMode = ref(true); // 默认展示为可编辑的 Markdown（左编右预览）
+// 已移除 Markdown 模式，使用纯文本编辑
 let autoSaveTimer: number | null = null;
 let isInitialLoad = true; // 标记是否是初始加载
+const showCreateDialog = ref(false); // 控制新建笔记对话框显示
+
+// 从本地存储获取最后编辑的笔记
+const getLastActiveNote = () => {
+  const lastNote = localStorage.getItem('ytools-last-note');
+  return lastNote || 'notes.md';
+};
+
+// 保存当前编辑的笔记到本地存储
+const saveLastActiveNote = (filename: string) => {
+  localStorage.setItem('ytools-last-note', filename);
+};
 
 // 加载所有笔记
 async function loadNotes() {
@@ -18,13 +33,19 @@ async function loadNotes() {
     const noteList = await invoke<string[]>('list_notes');
     notes.value = noteList.length > 0 ? noteList : ['notes.md'];
     
-    // 如果当前选中的笔记不在列表中，选中第一个
-    if (!notes.value.includes(activeNote.value)) {
+    // 获取最后编辑的笔记
+    const lastNote = getLastActiveNote();
+    // 如果最后编辑的笔记在列表中，选中它；否则选中第一个
+    if (notes.value.includes(lastNote)) {
+      activeNote.value = lastNote;
+    } else {
       activeNote.value = notes.value[0];
+      saveLastActiveNote(activeNote.value);
     }
   } catch (error) {
     console.error('加载笔记列表失败:', error);
     notes.value = ['notes.md'];
+    activeNote.value = 'notes.md';
   }
 }
 
@@ -74,24 +95,39 @@ async function saveNote() {
 function switchNote(filename: string) {
   if (activeNote.value !== filename) {
     activeNote.value = filename;
+    saveLastActiveNote(filename); // 保存当前选择的笔记
     loadNote(filename);
   }
 }
 
+// 处理内容变化
+function handleContentChange() {
+  saveStatus.value = '未保存';
+}
+
 // 新建笔记
 function createNote() {
-  const noteName = prompt('请输入笔记名称（不需要 .md 后缀）:');
-  if (noteName) {
-    const filename = noteName.endsWith('.md') ? noteName : `${noteName}.md`;
-    if (!notes.value.includes(filename)) {
-      notes.value.push(filename);
-      activeNote.value = filename;
-      content.value = '';
-      saveNote();
-    } else {
-      alert('该笔记已存在！');
-    }
+  showCreateDialog.value = true;
+}
+
+// 处理创建笔记确认
+function handleCreateConfirm(noteName: string) {
+  const filename = noteName.endsWith('.md') ? noteName : `${noteName}.md`;
+  if (!notes.value.includes(filename)) {
+    notes.value.push(filename);
+    activeNote.value = filename;
+    saveLastActiveNote(filename); // 保存新创建的笔记
+    content.value = '';
+    saveNote();
+    showCreateDialog.value = false;
+  } else {
+    alert('该笔记已存在！');
   }
+}
+
+// 处理创建笔记取消
+function handleCreateCancel() {
+  showCreateDialog.value = false;
 }
 
 // 自动保存 (内容变化后 2 秒自动保存)
@@ -122,11 +158,34 @@ watch(activeNote, (newNote) => {
   loadNote(newNote);
 });
 
-// 快捷键保存 (Ctrl+S)
+// 快捷键处理
 function handleKeydown(e: KeyboardEvent) {
+  // 如果对话框打开，不处理 ESC 键（让对话框自己处理）
+  if (showCreateDialog.value) {
+    return;
+  }
+  
+  // ESC 键隐藏窗口
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    hideWindow();
+    return;
+  }
+  
+  // Ctrl+S 保存
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault();
     saveNote();
+  }
+}
+
+// 隐藏窗口
+async function hideWindow() {
+  try {
+    const appWindow = getCurrentWindow();
+    await appWindow.hide();
+  } catch (error) {
+    console.error('隐藏窗口失败:', error);
   }
 }
 
@@ -135,49 +194,18 @@ onMounted(async () => {
   await loadNotes();
   await loadNote(activeNote.value);
   window.addEventListener('keydown', handleKeydown);
+  
+  // HomeView 初始化完成
 });
 
-// Markdown 渲染（简易、安全处理）
-function escapeHtml(raw: string): string {
-  return raw
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+// 清理事件监听
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+  }
+});
 
-function renderMarkdown(md: string): string {
-  const escaped = escapeHtml(md);
-  // 代码块 ```
-  let html = escaped.replace(/```([\s\S]*?)```/g, (_m, p1) => {
-    return `<pre class="md-code"><code>${p1.replace(/\n$/,'')}</code></pre>`;
-  });
-  // 标题 # ## ###
-  html = html.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
-  // 粗体/斜体/行内代码
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  html = html.replace(/`([^`]+?)`/g, '<code class="md-inline-code">$1</code>');
-  // 列表（简单处理）
-  html = html.replace(/^(?:-\s+.+|\d+\.\s+.+)(?:\n(?:-\s+.+|\d+\.\s+.+))*$/gm, (block: string) => {
-    const lines = block.split(/\n/);
-    const isOrdered = /^\d+\./.test(lines[0]);
-    const items = lines
-      .map(line => line.replace(/^(-|\d+\.)\s+/, ''))
-      .map(item => `<li>${item}</li>`) 
-      .join('');
-    return isOrdered ? `<ol>${items}</ol>` : `<ul>${items}</ul>`;
-  });
-  // 段落
-  html = html
-    .split(/\n{2,}/)
-    .map(blk => /<(h\d|ul|ol|pre)/.test(blk) ? blk : `<p>${blk.replace(/\n/g, '<br/>')}</p>`)
-    .join('');
-  return html;
-}
-
-const renderedContent = computed(() => renderMarkdown(content.value || ''));
 </script>
 
 <template>
@@ -199,36 +227,26 @@ const renderedContent = computed(() => renderMarkdown(content.value || ''));
       </div>
       <div class="actions">
         <span class="save-status">{{ saveStatus }}</span>
-        <div class="mode-toggle no-drag">
-          <button :class="['toggle-btn', { active: isMdMode }]" @click="isMdMode = true">MD</button>
-          <button :class="['toggle-btn', { active: !isMdMode }]" @click="isMdMode = false">源码</button>
-        </div>
-        <button class="btn-save no-drag" @click="saveNote" :disabled="isSaving">
-          {{ isSaving ? '保存中...' : '保存 (Ctrl+S)' }}
-        </button>
       </div>
     </div>
 
     <!-- 文本编辑器 -->
     <div class="editor-container">
-      <div v-if="isMdMode" class="md-split">
-        <textarea
-          v-model="content"
-          class="editor no-drag"
-          placeholder="开始输入你的笔记..."
-          @input="saveStatus = ''"
-        ></textarea>
-        <div class="preview" v-html="renderedContent"></div>
-      </div>
-      <div v-else class="source-only">
-        <textarea
-          v-model="content"
-          class="editor no-drag"
-          placeholder="开始输入你的笔记..."
-          @input="saveStatus = ''"
-        ></textarea>
-      </div>
+      <TextEditor
+        v-model="content"
+        :height="'100%'"
+        @change="handleContentChange"
+      />
     </div>
+
+    <!-- 新建笔记对话框 -->
+    <InputDialog
+      v-model="showCreateDialog"
+      title="新建笔记"
+      placeholder="请输入笔记名称（不需要 .md 后缀）"
+      @confirm="handleCreateConfirm"
+      @cancel="handleCreateCancel"
+    />
   </div>
 </template>
 
@@ -332,126 +350,98 @@ const renderedContent = computed(() => renderMarkdown(content.value || ''));
   text-align: right;
 }
 
-.btn-save {
-  padding: 8px 16px;
-  background-color: var(--color-accent);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-s);
-  cursor: pointer;
-  font-size: 14px;
-  transition: background var(--tr-fast), transform var(--tr-fast);
-  white-space: nowrap;
-  -webkit-app-region: no-drag;
-}
-
-.btn-save:hover:not(:disabled) {
-  background-color: var(--color-accent-hover);
-}
-
-.btn-save:disabled {
-  background-color: var(--color-border);
-  color: var(--color-text-muted);
-  cursor: not-allowed;
-}
+/* 保存按钮样式已移除 */
 
 .editor-container {
   flex: 1;
-  overflow: hidden;
-  background-color: var(--color-surface);
-}
-
-.md-split {
   display: flex;
-  height: 100%;
-}
-
-.md-split .editor {
-  width: 50%;
-  border-right: 1px solid var(--color-border);
-}
-
-.md-split .preview {
-  width: 50%;
-}
-
-.source-only, .source-only .editor {
-  height: 100%;
-}
-
-.editor {
-  width: 100%;
-  height: 100%;
-  padding: 20px;
-  border: none;
-  outline: none;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 15px;
-  line-height: 1.6;
-  resize: none;
-  background-color: var(--color-surface);
-  color: var(--color-text);
-  caret-color: var(--color-accent);
-}
-
-.editor::placeholder {
-  color: var(--color-text-muted);
-}
-
-.preview {
-  width: 100%;
-  height: 100%;
-  padding: 24px;
-  overflow-y: auto;
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
-.preview h1,
-.preview h2,
-.preview h3 {
-  margin: 12px 0 8px;
-  font-weight: 700;
-}
-.preview h1 { font-size: 24px; }
-.preview h2 { font-size: 20px; }
-.preview h3 { font-size: 18px; }
-
-.preview p { margin: 8px 0; }
-.preview ul, .preview ol { margin: 8px 0 8px 18px; }
-.preview code.md-inline-code {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-}
-.preview pre.md-code {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  padding: 12px;
-  border-radius: 10px;
-  overflow: auto;
-}
-
-.mode-toggle {
-  display: inline-flex;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
+  flex-direction: column;
   overflow: hidden;
+  background: var(--color-surface);
+  border-radius: 12px;
+  margin: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-border);
+  position: relative;
 }
-.toggle-btn {
-  padding: 6px 12px;
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-.toggle-btn.active {
-  background: var(--color-surface-2);
-  color: var(--color-text);
-}
+
+/* 模式切换按钮样式已移除 */
 
 .no-drag { -webkit-app-region: no-drag; }
+
+/* 编辑器容器动画效果 */
+.editor-container {
+  transition: all 0.3s ease;
+}
+
+.editor-container:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+/* 响应式设计优化 */
+@media (max-width: 1024px) {
+  .editor-container {
+    margin: 8px;
+    border-radius: 8px;
+  }
+  
+  .toolbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  
+  .tabs {
+    gap: 2px;
+  }
+  
+  .tab {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+  
+  .actions {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    --color-bg: #0f1115;
+    --color-surface: #12151c;
+    --color-surface-2: #161a22;
+    --color-border: #232938;
+    --color-text: #e5e7eb;
+    --color-text-muted: #9ca3af;
+    --color-accent: #818cf8;
+    --color-accent-hover: #6366f1;
+    --color-accent-press: #4f46e5;
+  }
+  
+  .toolbar {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+  }
+  
+  .tabs {
+    order: 1;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  .actions {
+    order: 2;
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .editor-container {
+    margin: 4px;
+    border-radius: 8px;
+  }
+  
+  /* 模式切换按钮样式已移除 */
+}
 </style>
 
