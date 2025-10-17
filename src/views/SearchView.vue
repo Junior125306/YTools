@@ -8,6 +8,7 @@ const query = ref('');
 const searchResults = ref<string[]>([]);
 const selectedIndex = ref(0);
 const currentWindow = getCurrentWindow();
+const isOpening = ref(false); // 防止回车重复触发打开
 
 // 搜索函数
 async function performSearch(searchQuery: string) {
@@ -26,6 +27,8 @@ async function performSearch(searchQuery: string) {
 
 // 打开文件夹
 async function openFolder(folderName: string) {
+  if (isOpening.value) return; // 防抖：已在打开中则忽略
+  isOpening.value = true;
   try {
     // 先尝试隐藏窗口，提供更快的反馈（无权限时忽略错误）
     await currentWindow.hide().catch(() => {});
@@ -40,6 +43,12 @@ async function openFolder(folderName: string) {
     console.error('打开文件夹失败:', error);
     // 即使出错也要尝试隐藏窗口（忽略错误）
     await currentWindow.hide().catch(() => {});
+  }
+  finally {
+    // 短暂延迟，避免同一次按键冒泡导致的双触发
+    setTimeout(() => {
+      isOpening.value = false;
+    }, 50);
   }
 }
 
@@ -100,8 +109,7 @@ onMounted(async () => {
   searchInput.value?.focus();
   
   // 全局监听键盘事件（确保 ESC/Enter 始终有效）
-  window.addEventListener('keydown', handleKeydown);
-  // 捕获阶段再监听一层，避免被其他元素拦截
+  // 仅在捕获阶段监听一次，避免重复与冒泡触发两次
   document.addEventListener('keydown', handleKeydown, { capture: true } as AddEventListenerOptions);
   
   // 监听窗口显示事件
@@ -114,7 +122,6 @@ onMounted(async () => {
 
 // 组件卸载时清理事件监听器
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown);
   document.removeEventListener('keydown', handleKeydown, { capture: true } as AddEventListenerOptions);
 });
 </script>

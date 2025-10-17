@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
@@ -341,13 +342,13 @@ pub fn run() {
             update_font_size
         ])
         .setup(|app| {
-            // 为主窗口添加失焦自动隐藏功能
+            // 跟踪主窗口焦点状态（不再在失焦时自动隐藏）
+            let main_focused = Arc::new(AtomicBool::new(false));
             if let Some(main_window) = app.get_webview_window("main") {
-                let window_clone = main_window.clone();
+                let focused_flag = main_focused.clone();
                 main_window.on_window_event(move |event| {
-                    if let WindowEvent::Focused(false) = event {
-                        // 窗口失去焦点时自动隐藏
-                        let _ = window_clone.hide();
+                    if let WindowEvent::Focused(focused) = event {
+                        focused_flag.store(*focused, Ordering::SeqCst);
                     }
                 });
             }
@@ -418,6 +419,7 @@ pub fn run() {
             let alt_space = Shortcut::new(Some(Modifiers::ALT), Code::Space);
             let ctrl_space = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
 
+            let main_focused_for_shortcut = main_focused.clone();
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |app_handle, received_shortcut, event| {
@@ -428,12 +430,18 @@ pub fn run() {
                                     // 更可靠的状态检查：同时检查可见性和是否最小化
                                     let is_visible = window.is_visible().unwrap_or(false);
                                     let is_minimized = window.is_minimized().unwrap_or(false);
+                                    let is_focused = main_focused_for_shortcut.load(Ordering::SeqCst);
 
                                     if is_visible && !is_minimized {
-                                        // 窗口可见且未最小化，隐藏它
-                                        let _ = window.hide();
+                                        // 如果已获得焦点，则隐藏；否则将其聚焦到前台
+                                        if is_focused {
+                                            let _ = window.hide();
+                                        } else {
+                                            let _ = window.show();
+                                            let _ = window.set_focus();
+                                        }
                                     } else {
-                                        // 窗口不可见或最小化，显示它
+                                        // 窗口不可见或最小化，显示并聚焦
                                         if is_minimized {
                                             let _ = window.unminimize();
                                         }

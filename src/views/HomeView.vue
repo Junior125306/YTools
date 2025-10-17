@@ -247,6 +247,8 @@ onUnmounted(() => {
         <button class="tab new-tab no-drag" @click="createNote" title="新建笔记">
           +
         </button>
+        <!-- 拖拽空白区域：用于在 + 按钮右侧拖动窗口 -->
+        <div class="drag-spacer"></div>
       </div>
       <div class="actions">
         <span class="save-status">{{ saveStatus }}</span>
@@ -360,6 +362,12 @@ onUnmounted(() => {
   background-color: var(--color-accent);
   color: #fff;
   border-color: var(--color-accent);
+}
+
+/* + 按钮右侧可拖拽空白区域 */
+.drag-spacer {
+  flex: 1;
+  -webkit-app-region: drag;
 }
 
 .actions {
