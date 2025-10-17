@@ -1,9 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Manager, WindowEvent,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -11,6 +12,26 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+// 配置结构体
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Config {
+    #[serde(default = "default_font_size")]
+    font_size: u32,
+}
+
+// 默认字体大小
+fn default_font_size() -> u32 {
+    16
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            font_size: default_font_size(),
+        }
+    }
 }
 
 // 获取 .ytools 目录路径
@@ -24,6 +45,56 @@ fn get_ytools_dir() -> Result<PathBuf, String> {
     }
 
     Ok(ytools_dir)
+}
+
+// 获取配置文件路径
+fn get_config_path() -> Result<PathBuf, String> {
+    let ytools_dir = get_ytools_dir()?;
+    Ok(ytools_dir.join("config.json"))
+}
+
+// 读取配置
+#[tauri::command]
+fn read_config() -> Result<Config, String> {
+    let config_path = get_config_path()?;
+
+    if !config_path.exists() {
+        // 如果配置文件不存在，返回默认配置并保存
+        let default_config = Config::default();
+        save_config(default_config.clone())?;
+        return Ok(default_config);
+    }
+
+    let content = fs::read_to_string(&config_path)
+        .map_err(|e| format!("读取配置文件失败: {}", e))?;
+    
+    let config: Config = serde_json::from_str(&content)
+        .map_err(|e| format!("解析配置文件失败: {}", e))?;
+
+    Ok(config)
+}
+
+// 保存配置
+#[tauri::command]
+fn save_config(config: Config) -> Result<(), String> {
+    let config_path = get_config_path()?;
+    
+    let content = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("序列化配置失败: {}", e))?;
+
+    fs::write(&config_path, content)
+        .map_err(|e| format!("保存配置文件失败: {}", e))?;
+
+    Ok(())
+}
+
+// 更新配置中的字体大小
+#[tauri::command]
+fn update_font_size(font_size: u32) -> Result<(), String> {
+    let mut config = read_config()?;
+    config.font_size = font_size;
+    save_config(config)?;
+    Ok(())
 }
 
 // 读取 markdown 文件
@@ -264,9 +335,23 @@ pub fn run() {
             save_note,
             list_notes,
             search_workspaces,
-            open_folder
+            open_folder,
+            read_config,
+            save_config,
+            update_font_size
         ])
         .setup(|app| {
+            // 为主窗口添加失焦自动隐藏功能
+            if let Some(main_window) = app.get_webview_window("main") {
+                let window_clone = main_window.clone();
+                main_window.on_window_event(move |event| {
+                    if let WindowEvent::Focused(false) = event {
+                        // 窗口失去焦点时自动隐藏
+                        let _ = window_clone.hide();
+                    }
+                });
+            }
+
             // 创建托盘菜单
             let show_hide = MenuItemBuilder::with_id("show_hide", "显示/隐藏窗口").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
@@ -402,6 +487,15 @@ pub fn run() {
                                     .build();
 
                                     if let Ok(window) = result {
+                                        // 为搜索窗口添加失焦自动隐藏功能
+                                        let window_clone = window.clone();
+                                        window.on_window_event(move |event| {
+                                            if let WindowEvent::Focused(false) = event {
+                                                // 窗口失去焦点时自动隐藏
+                                                let _ = window_clone.hide();
+                                            }
+                                        });
+
                                         let _ = window.show();
                                         let _ = window.set_focus();
                                     }

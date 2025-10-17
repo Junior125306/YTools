@@ -4,9 +4,10 @@
       ref="textareaRef"
       v-model="localValue"
       :placeholder="placeholder"
-      :style="{ height: height }"
+      :style="{ height: height, fontSize: fontSize + 'px' }"
       class="text-editor"
       @input="handleInput"
+      @wheel="handleWheel"
     ></textarea>
   </div>
 </template>
@@ -18,22 +19,26 @@ interface Props {
   modelValue: string;
   placeholder?: string;
   height?: string;
+  fontSize?: number;
 }
 
 interface Emits {
   (e: 'update:modelValue', value: string): void;
   (e: 'change', value: string): void;
+  (e: 'update:fontSize', value: number): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '开始输入你的笔记...',
-  height: '100%'
+  height: '100%',
+  fontSize: 16
 });
 
 const emit = defineEmits<Emits>();
 
 const textareaRef = ref<HTMLTextAreaElement>();
 const localValue = ref(props.modelValue);
+const fontSize = ref(props.fontSize);
 
 // 处理输入事件
 const handleInput = () => {
@@ -47,6 +52,26 @@ watch(() => props.modelValue, (newValue) => {
     localValue.value = newValue;
   }
 });
+
+// 监听外部字体大小变化
+watch(() => props.fontSize, (newSize) => {
+  if (fontSize.value !== newSize) {
+    fontSize.value = newSize;
+  }
+});
+
+// 处理滚轮事件 (Ctrl + 滚轮调整字体大小)
+const handleWheel = (e: WheelEvent) => {
+  if (e.ctrlKey) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -1 : 1;
+    const newSize = Math.max(12, Math.min(32, fontSize.value + delta));
+    if (newSize !== fontSize.value) {
+      fontSize.value = newSize;
+      emit('update:fontSize', newSize);
+    }
+  }
+};
 
 // 获取当前值
 const getValue = () => {
@@ -106,6 +131,7 @@ defineExpose({
 
 onMounted(() => {
   localValue.value = props.modelValue;
+  fontSize.value = props.fontSize;
 });
 </script>
 
@@ -127,7 +153,7 @@ onMounted(() => {
   background: var(--color-surface);
   color: var(--color-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  /* font-size is now controlled by inline style */
   line-height: 1.6;
   resize: none;
   outline: none;
@@ -170,7 +196,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .text-editor {
     padding: 12px;
-    font-size: 13px;
+    /* font-size is now controlled by inline style */
   }
 }
 </style>

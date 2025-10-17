@@ -15,6 +15,7 @@ const saveStatus = ref<string>('');
 let autoSaveTimer: number | null = null;
 let isInitialLoad = true; // 标记是否是初始加载
 const showCreateDialog = ref(false); // 控制新建笔记对话框显示
+const fontSize = ref<number>(16); // 字体大小，默认 16px
 
 // 从本地存储获取最后编辑的笔记
 const getLastActiveNote = () => {
@@ -26,6 +27,27 @@ const getLastActiveNote = () => {
 const saveLastActiveNote = (filename: string) => {
   localStorage.setItem('ytools-last-note', filename);
 };
+
+// 加载配置
+async function loadConfig() {
+  try {
+    const config = await invoke<{ font_size: number }>('read_config');
+    fontSize.value = config.font_size;
+  } catch (error) {
+    console.error('加载配置失败:', error);
+    fontSize.value = 16; // 使用默认值
+  }
+}
+
+// 处理字体大小变化
+async function handleFontSizeChange(newSize: number) {
+  fontSize.value = newSize;
+  try {
+    await invoke('update_font_size', { fontSize: newSize });
+  } catch (error) {
+    console.error('保存字体大小失败:', error);
+  }
+}
 
 // 加载所有笔记
 async function loadNotes() {
@@ -191,6 +213,7 @@ async function hideWindow() {
 
 // 初始化
 onMounted(async () => {
+  await loadConfig(); // 先加载配置
   await loadNotes();
   await loadNote(activeNote.value);
   window.addEventListener('keydown', handleKeydown);
@@ -235,7 +258,9 @@ onUnmounted(() => {
       <TextEditor
         v-model="content"
         :height="'100%'"
+        :font-size="fontSize"
         @change="handleContentChange"
+        @update:fontSize="handleFontSizeChange"
       />
     </div>
 
