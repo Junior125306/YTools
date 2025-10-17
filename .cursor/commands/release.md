@@ -76,7 +76,10 @@ git diff --staged --stat
 
 ### 3. 更新 CHANGELOG.md
 
-**必须自动执行**: 使用 `search_replace` 在 `## [Unreleased]` 下方插入新版本:
+**必须自动执行**: 
+
+#### 3.1 插入新版本变更记录
+使用 `search_replace` 在 `## [Unreleased]` 下方插入新版本:
 
 ```markdown
 ## [Unreleased]
@@ -104,6 +107,34 @@ git diff --staged --stat
 - 根据 git diff 内容自动生成变更描述
 - 使用用户友好的语言，非技术术语
 - 按重要性排序
+
+#### 3.2 更新底部版本链接
+**关键**: 必须在 git commit **之前**完成，否则会产生二次提交。
+
+使用 `search_replace` 更新文件底部的版本链接引用：
+
+```markdown
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/yourusername/ytools/releases/tag/v0.2.0
+[0.1.0]: https://github.com/yourusername/ytools/releases/tag/v0.1.0
+```
+
+**操作步骤**:
+1. 找到旧的 `[Unreleased]:` 行（如 `compare/v0.1.0...HEAD`）
+2. 替换为新版本号（如 `compare/v0.2.0...HEAD`）
+3. 在其后插入新版本的链接行（如 `[0.2.0]: https://...`）
+
+**示例替换**:
+```
+旧内容:
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/yourusername/ytools/releases/tag/v0.1.0
+
+新内容:
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/yourusername/ytools/releases/tag/v0.2.0
+[0.1.0]: https://github.com/yourusername/ytools/releases/tag/v0.1.0
+```
 
 ---
 
@@ -238,7 +269,8 @@ git push origin v0.2.0
 - [ ] 使用 `search_replace` 更新 `package.json` 版本号
 - [ ] 使用 `search_replace` 更新 `src-tauri/Cargo.toml` 版本号
 - [ ] 使用 `search_replace` 更新 `src-tauri/tauri.conf.json` 版本号
-- [ ] 使用 `search_replace` 更新 `CHANGELOG.md`（插入新版本记录）
+- [ ] 使用 `search_replace` 更新 `CHANGELOG.md` 主体内容（插入新版本记录）
+- [ ] **使用 `search_replace` 更新 `CHANGELOG.md` 底部版本链接（在 commit 之前！）**
 - [ ] 使用 `search_replace` 更新 `README.md` 已实现功能（如果是 feat）
 - [ ] 使用 `search_replace` 更新 `README.md` 开发路线图（删除已完成项）
 - [ ] 生成符合约定式提交规范的 commit message
