@@ -9,13 +9,73 @@
 
 ### 计划中
 
-- 设置中心（主题、字体、路径配置）
 - 快捷图标访问面板
 - 快捷指令系统
 - JSON 格式化工具
 - 加解密工具（AES、Base64）
 - 远程桌面快捷方式
 - 工单管理系统
+
+## [0.3.0] - 2025-01-28
+
+### Added (新增)
+
+- ✨ **统一笔记管理系统**
+  - 支持导入外部 `.md` 和 `.txt` 文件到笔记列表
+  - 所有笔记统一管理，混合显示内置和外部文件
+  - 删除笔记时可选择永久删除文件或仅从列表移除
+  - 使用完整路径存储，支持同名文件共存
+  - 添加导入按钮（📁）快速导入现有文件
+- ✨ **设置中心**
+  - 独立设置窗口，支持托盘菜单和主窗口按钮打开
+  - 编辑器设置：字体大小、字体族、行高配置
+  - 通用设置：开机启动开关
+  - 搜索设置：可配置的搜索目录列表
+  - 笔记设置：默认笔记保存位置配置
+  - 支持重置为默认设置
+- ✨ **拼音搜索功能**
+  - 支持中文拼音全拼搜索（如：`changan` 匹配 `长安`）
+  - 支持中文拼音首字母搜索（如：`ca` 匹配 `长安`）
+  - 智能处理多音字（如：`长安` 同时生成 `changan` 和 `zhangan`）
+  - 模糊搜索自动考虑拼音匹配得分
+- ✨ **配置持久化存储**
+  - 使用 `tauri-plugin-store` 替代自定义配置文件
+  - 支持自动保存（100ms 防抖）
+  - 支持从旧配置文件自动迁移
+  - 配置实时同步到所有窗口
+
+### Changed (变更)
+
+- ♻️ **笔记路径管理重构**
+  - 移除 `list_notes` Rust 命令，改为从配置读取
+  - `read_note` 和 `save_note` 支持完整路径而非仅文件名
+  - 新增 `create_note` 命令，在指定目录创建笔记并返回完整路径
+  - 新增 `import_note` 命令，使用原生文件选择对话框
+  - 新增 `delete_note_file` 命令，删除指定路径的文件
+- ♻️ **系统托盘优化**
+  - 托盘菜单新增"设置"选项
+  - 从托盘打开设置时不再自动显示主窗口
+- ♻️ **搜索功能优化**
+  - 搜索目录可在设置中配置，支持多个目录
+  - 未配置搜索目录时显示友好提示
+  - 搜索结果支持键盘导航时滚动条自动跟随
+  - 移除搜索窗口外部边框和阴影
+
+### Performance (性能优化)
+
+- ⚡ 预创建搜索窗口（默认隐藏），提升首次打开速度
+- ⚡ 简化全局快捷键处理逻辑
+- ⚡ 移除拼音转换调试日志
+
+### Technical (技术)
+
+- 新增依赖：`tauri-plugin-store`、`tauri-plugin-dialog`、`tauri-plugin-autostart`
+- 新增依赖：`pinyin` (Rust)，用于中文拼音转换
+- 新增前端工具模块：`configStore.ts`、`dialogHelper.ts`
+- 新增组件：`SettingsView.vue`、`SettingsDialog.vue`
+- 新增路由：`/settings`
+- 新增 Rust 命令：`import_note`、`create_note`、`delete_note_file`
+- 重构笔记管理逻辑，所有笔记路径存储在配置的 `notes` 字段
 
 ## [0.2.1] - 2025-10-17
 
@@ -116,6 +176,7 @@
 
 ---
 
-[Unreleased]: https://github.com/yourusername/ytools/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/yourusername/ytools/releases/tag/v0.3.0
 [0.2.1]: https://github.com/yourusername/ytools/releases/tag/v0.2.1
 [0.1.0]: https://github.com/yourusername/ytools/releases/tag/v0.1.0

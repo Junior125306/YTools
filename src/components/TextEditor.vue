@@ -4,7 +4,12 @@
       ref="textareaRef"
       v-model="localValue"
       :placeholder="placeholder"
-      :style="{ height: height, fontSize: fontSize + 'px' }"
+      :style="{
+        height: height,
+        fontSize: fontSize + 'px',
+        fontFamily: fontFamily,
+        lineHeight: lineHeight
+      }"
       class="text-editor"
       @input="handleInput"
       @wheel="handleWheel"
@@ -20,6 +25,8 @@ interface Props {
   placeholder?: string;
   height?: string;
   fontSize?: number;
+  fontFamily?: string;
+  lineHeight?: number;
 }
 
 interface Emits {
@@ -31,7 +38,9 @@ interface Emits {
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '开始输入你的笔记...',
   height: '100%',
-  fontSize: 16
+  fontSize: 16,
+  fontFamily: "Consolas, 'Courier New', monospace",
+  lineHeight: 1.6
 });
 
 const emit = defineEmits<Emits>();
@@ -39,6 +48,8 @@ const emit = defineEmits<Emits>();
 const textareaRef = ref<HTMLTextAreaElement>();
 const localValue = ref(props.modelValue);
 const fontSize = ref(props.fontSize);
+const fontFamily = ref(props.fontFamily);
+const lineHeight = ref(props.lineHeight);
 
 // 处理输入事件
 const handleInput = () => {
@@ -57,6 +68,20 @@ watch(() => props.modelValue, (newValue) => {
 watch(() => props.fontSize, (newSize) => {
   if (fontSize.value !== newSize) {
     fontSize.value = newSize;
+  }
+});
+
+// 监听外部字体族变化
+watch(() => props.fontFamily, (newFamily) => {
+  if (fontFamily.value !== newFamily) {
+    fontFamily.value = newFamily;
+  }
+});
+
+// 监听外部行高变化
+watch(() => props.lineHeight, (newHeight) => {
+  if (lineHeight.value !== newHeight) {
+    lineHeight.value = newHeight;
   }
 });
 

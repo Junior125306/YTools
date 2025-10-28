@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, type ComponentPublicInstance } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getSearchDirectories } from '../utils/configStore';
 
 const searchInput = ref<HTMLInputElement | null>(null);
 const query = ref('');
@@ -9,19 +10,36 @@ const searchResults = ref<string[]>([]);
 const selectedIndex = ref(0);
 const currentWindow = getCurrentWindow();
 const isOpening = ref(false); // 防止回车重复触发打开
+const hasSearchDirectories = ref(true); // 是否配置了搜索目录
+const resultRefs = ref<HTMLElement[]>([]); // 存储结果项的引用
 
 // 搜索函数
 async function performSearch(searchQuery: string) {
   try {
-    // 无论 query 是否为空，都调用后端搜索
-    // 后端会处理：空字符串返回所有文件夹，有内容则过滤匹配的文件夹
+    // 获取搜索目录列表
+    const directories = await getSearchDirectories();
+    
+    // 检查是否配置了搜索目录
+    if (directories.length === 0) {
+      hasSearchDirectories.value = false;
+      searchResults.value = [];
+      resultRefs.value = []; // 清空引用
+      return;
+    }
+    
+    hasSearchDirectories.value = true;
+    
+    // 调用后端搜索，传递目录列表
     searchResults.value = await invoke<string[]>('search_workspaces', { 
-      query: searchQuery || '' 
+      query: searchQuery || '',
+      directories
     });
     selectedIndex.value = 0;
+    resultRefs.value = []; // 清空引用，等待新的结果渲染
   } catch (error) {
     console.error('搜索失败:', error);
     searchResults.value = [];
+    resultRefs.value = [];
   }
 }
 
@@ -67,17 +85,31 @@ async function handleKeydown(e: KeyboardEvent) {
     e.preventDefault();
     if (searchResults.value.length > 0) {
       selectedIndex.value = (selectedIndex.value + 1) % searchResults.value.length;
+      await scrollToSelected();
     }
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     if (searchResults.value.length > 0) {
       selectedIndex.value = (selectedIndex.value - 1 + searchResults.value.length) % searchResults.value.length;
+      await scrollToSelected();
     }
   } else if (e.key === 'Enter') {
     e.preventDefault();
     if (searchResults.value.length > 0 && searchResults.value[selectedIndex.value]) {
       openFolder(searchResults.value[selectedIndex.value]);
     }
+  }
+}
+
+// 滚动到选中的项目
+async function scrollToSelected() {
+  await nextTick();
+  const selectedElement = resultRefs.value[selectedIndex.value];
+  if (selectedElement) {
+    selectedElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest'
+    });
   }
 }
 
@@ -89,6 +121,13 @@ function selectItem(index: number) {
 // 点击项目
 function clickItem(index: number) {
   openFolder(searchResults.value[index]);
+}
+
+// 设置结果项的 ref
+function setResultRef(el: Element | ComponentPublicInstance | null, index: number) {
+  if (el) {
+    resultRefs.value[index] = el as HTMLElement;
+  }
 }
 
 // 点击背景关闭
@@ -139,7 +178,13 @@ onUnmounted(() => {
       />
       
       <div class="results-container">
-        <div v-if="searchResults.length === 0" class="search-empty">
+        <div v-if="!hasSearchDirectories" class="search-empty">
+          <div class="empty-icon">⚠️</div>
+          <div class="empty-title">未配置搜索目录</div>
+          <div class="empty-desc">请在设置中添加搜索目录后使用此功能</div>
+        </div>
+        
+        <div v-else-if="searchResults.length === 0" class="search-empty">
           未找到匹配的文件夹
         </div>
         
@@ -147,6 +192,7 @@ onUnmounted(() => {
           <div
             v-for="(result, index) in searchResults"
             :key="result"
+            :ref="(el) => setResultRef(el, index)"
             :class="['search-result-item', { selected: index === selectedIndex }]"
             @click="clickItem(index)"
             @mouseenter="selectItem(index)"
@@ -186,7 +232,6 @@ onUnmounted(() => {
   width: min(720px, 92vw);
   height: min(70vh, 720px);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-l);
   box-shadow: var(--shadow-md);
   overflow: hidden;
@@ -280,6 +325,23 @@ onUnmounted(() => {
   text-align: center;
   color: var(--color-text-muted);
   font-size: 14px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: var(--color-text-muted);
 }
 
 .search-footer {

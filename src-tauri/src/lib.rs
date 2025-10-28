@@ -1,38 +1,18 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
-use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    Manager, WindowEvent, Emitter,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use pinyin::ToPinyinMulti;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-// 配置结构体
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Config {
-    #[serde(default = "default_font_size")]
-    font_size: u32,
-}
-
-// 默认字体大小
-fn default_font_size() -> u32 {
-    16
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            font_size: default_font_size(),
-        }
-    }
 }
 
 // 获取 .ytools 目录路径
@@ -48,61 +28,10 @@ fn get_ytools_dir() -> Result<PathBuf, String> {
     Ok(ytools_dir)
 }
 
-// 获取配置文件路径
-fn get_config_path() -> Result<PathBuf, String> {
-    let ytools_dir = get_ytools_dir()?;
-    Ok(ytools_dir.join("config.json"))
-}
-
-// 读取配置
-#[tauri::command]
-fn read_config() -> Result<Config, String> {
-    let config_path = get_config_path()?;
-
-    if !config_path.exists() {
-        // 如果配置文件不存在，返回默认配置并保存
-        let default_config = Config::default();
-        save_config(default_config.clone())?;
-        return Ok(default_config);
-    }
-
-    let content = fs::read_to_string(&config_path)
-        .map_err(|e| format!("读取配置文件失败: {}", e))?;
-    
-    let config: Config = serde_json::from_str(&content)
-        .map_err(|e| format!("解析配置文件失败: {}", e))?;
-
-    Ok(config)
-}
-
-// 保存配置
-#[tauri::command]
-fn save_config(config: Config) -> Result<(), String> {
-    let config_path = get_config_path()?;
-    
-    let content = serde_json::to_string_pretty(&config)
-        .map_err(|e| format!("序列化配置失败: {}", e))?;
-
-    fs::write(&config_path, content)
-        .map_err(|e| format!("保存配置文件失败: {}", e))?;
-
-    Ok(())
-}
-
-// 更新配置中的字体大小
-#[tauri::command]
-fn update_font_size(font_size: u32) -> Result<(), String> {
-    let mut config = read_config()?;
-    config.font_size = font_size;
-    save_config(config)?;
-    Ok(())
-}
-
 // 读取 markdown 文件
 #[tauri::command]
 fn read_note(filename: String) -> Result<String, String> {
-    let ytools_dir = get_ytools_dir()?;
-    let file_path = ytools_dir.join(&filename);
+    let file_path = PathBuf::from(&filename);
 
     if !file_path.exists() {
         return Ok(String::new());
@@ -115,8 +44,7 @@ fn read_note(filename: String) -> Result<String, String> {
 // 保存 markdown 文件
 #[tauri::command]
 fn save_note(filename: String, content: String) -> Result<(), String> {
-    let ytools_dir = get_ytools_dir()?;
-    let file_path = ytools_dir.join(&filename);
+    let file_path = PathBuf::from(&filename);
 
     fs::write(&file_path, content).map_err(|e| format!("保存文件失败: {}", e))?;
     Ok(())
@@ -148,6 +76,86 @@ fn normalize(input: &str) -> String {
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
         .collect::<String>()
+}
+
+// 将中文字符串转换为拼音全拼（小写，无分隔符）
+// 为了处理多音字，返回多个可能的拼音组合
+fn to_pinyin_full_multi(text: &str) -> Vec<String> {
+    let mut current_results = vec![String::new()];
+    
+    for c in text.chars() {
+        if c.is_ascii_alphabetic() {
+            // ASCII 字母保留（转小写）
+            let lower = c.to_lowercase().to_string();
+            for result in current_results.iter_mut() {
+                result.push_str(&lower);
+            }
+        } else if c.is_ascii() {
+            // 其他 ASCII 字符保留
+            for result in current_results.iter_mut() {
+                result.push(c);
+            }
+        } else {
+            // 中文字符：获取所有可能的拼音（使用 ToPinyinMulti）
+            if let Some(pinyin_multi) = c.to_pinyin_multi() {
+                let mut new_results = Vec::new();
+                for pinyin_option in pinyin_multi {
+                    for base in &current_results {
+                        let mut new_result = base.clone();
+                        new_result.push_str(pinyin_option.plain());
+                        new_results.push(new_result);
+                    }
+                }
+                if !new_results.is_empty() {
+                    current_results = new_results;
+                }
+            }
+        }
+    }
+    
+    current_results.into_iter()
+        .map(|s| s.to_lowercase())
+        .collect()
+}
+
+// 将中文字符串转换为拼音首字母缩写（小写）
+// 为了处理多音字，返回多个可能的首字母组合
+fn to_pinyin_initials_multi(text: &str) -> Vec<String> {
+    let mut current_results = vec![String::new()];
+    
+    for c in text.chars() {
+        if c.is_ascii_alphabetic() {
+            // ASCII 字母保留（转小写）
+            let lower = c.to_lowercase().to_string();
+            for result in current_results.iter_mut() {
+                result.push_str(&lower);
+            }
+        } else if c.is_ascii() {
+            // 跳过其他 ASCII 字符
+            continue;
+        } else {
+            // 中文字符：获取所有可能的拼音首字母（使用 ToPinyinMulti）
+            if let Some(pinyin_multi) = c.to_pinyin_multi() {
+                let mut new_results = Vec::new();
+                for pinyin_option in pinyin_multi {
+                    if let Some(first_char) = pinyin_option.plain().chars().next() {
+                        for base in &current_results {
+                            let mut new_result = base.clone();
+                            new_result.push(first_char);
+                            new_results.push(new_result);
+                        }
+                    }
+                }
+                if !new_results.is_empty() {
+                    current_results = new_results;
+                }
+            }
+        }
+    }
+    
+    current_results.into_iter()
+        .map(|s| s.to_lowercase())
+        .collect()
 }
 
 // 最长公共子串长度（连续匹配长度）
@@ -229,10 +237,9 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 
 // 搜索工作区文件夹
 #[tauri::command]
-fn search_workspaces(query: String) -> Result<Vec<String>, String> {
-    let workspace_dir = PathBuf::from("D:\\workspaces");
-
-    if !workspace_dir.exists() {
+fn search_workspaces(query: String, directories: Vec<String>) -> Result<Vec<String>, String> {
+    // 如果没有配置搜索目录，返回空结果
+    if directories.is_empty() {
         return Ok(Vec::new());
     }
 
@@ -242,23 +249,44 @@ fn search_workspaces(query: String) -> Result<Vec<String>, String> {
     let mut results = Vec::new();
     let mut all_dirs: Vec<String> = Vec::new();
 
-    if let Ok(entries) = fs::read_dir(workspace_dir) {
-        for entry in entries.flatten() {
-            if let Ok(metadata) = entry.metadata() {
-                if metadata.is_dir() {
-                    if let Ok(dir_name) = entry.file_name().into_string() {
-                        let name_lower = dir_name.to_lowercase();
-                        let name_norm = normalize(&name_lower);
+    // 遍历所有配置的搜索目录
+    for workspace_dir_str in directories {
+        let workspace_dir = PathBuf::from(&workspace_dir_str);
+        
+        if !workspace_dir.exists() {
+            continue;
+        }
 
-                        // 记录全量目录，用于回退模糊匹配
-                        all_dirs.push(dir_name.clone());
+        if let Ok(entries) = fs::read_dir(workspace_dir) {
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_dir() {
+                        if let Ok(dir_name) = entry.file_name().into_string() {
+                            let name_lower = dir_name.to_lowercase();
+                            let name_norm = normalize(&name_lower);
+                            
+                            // 生成拼音表示（多音字版本）
+                            let name_pinyin_full_multi = to_pinyin_full_multi(&dir_name);
+                            let name_pinyin_initials_multi = to_pinyin_initials_multi(&dir_name);
 
-                        // 先尝试包含匹配（兼容去除分隔符后的包含）
-                        if query.is_empty()
-                            || name_lower.contains(&query_lower)
-                            || (!query_norm.is_empty() && name_norm.contains(&query_norm))
-                        {
-                            results.push(dir_name);
+                            // 检查是否有任何拼音版本匹配
+                            let pinyin_full_match = name_pinyin_full_multi.iter()
+                                .any(|py| py.contains(&query_lower));
+                            let pinyin_initials_match = name_pinyin_initials_multi.iter()
+                                .any(|py| py.contains(&query_lower));
+
+                            // 记录全量目录，用于回退模糊匹配
+                            all_dirs.push(dir_name.clone());
+
+                            // 先尝试包含匹配（兼容去除分隔符后的包含 + 多音字拼音匹配）
+                            if query.is_empty()
+                                || name_lower.contains(&query_lower)
+                                || (!query_norm.is_empty() && name_norm.contains(&query_norm))
+                                || pinyin_full_match // 拼音全拼匹配（多音字）
+                                || pinyin_initials_match // 拼音首字母匹配（多音字）
+                            {
+                                results.push(dir_name);
+                            }
                         }
                     }
                 }
@@ -273,16 +301,53 @@ fn search_workspaces(query: String) -> Result<Vec<String>, String> {
     }
 
     // 回退：基于最长连续匹配（最长公共子串）、总匹配字符数（LCS）与编辑距离进行排序，取前5
+    // 同时考虑拼音匹配的得分（支持多音字）
     let mut scored: Vec<(String, usize, usize, usize)> = Vec::new();
     for name in all_dirs.into_iter() {
         let name_lower = name.to_lowercase();
         let name_norm = normalize(&name_lower);
+        let name_pinyin_full_multi = to_pinyin_full_multi(&name);
+        let name_pinyin_initials_multi = to_pinyin_initials_multi(&name);
 
+        // 计算原始名称匹配得分
         let lcs_sub = longest_common_substring_len(&name_norm, &query_norm);
         let lcs_seq = longest_common_subsequence_len(&name_norm, &query_norm);
         let edit = levenshtein_distance(&name_norm, &query_norm);
+        
+        // 计算所有拼音全拼的最佳匹配得分
+        let mut best_pinyin_lcs_sub = 0;
+        let mut best_pinyin_lcs_seq = 0;
+        let mut best_pinyin_edit = usize::MAX;
+        for pinyin in &name_pinyin_full_multi {
+            let lcs_sub = longest_common_substring_len(pinyin, &query_lower);
+            let lcs_seq = longest_common_subsequence_len(pinyin, &query_lower);
+            let edit = levenshtein_distance(pinyin, &query_lower);
+            
+            best_pinyin_lcs_sub = best_pinyin_lcs_sub.max(lcs_sub);
+            best_pinyin_lcs_seq = best_pinyin_lcs_seq.max(lcs_seq);
+            best_pinyin_edit = best_pinyin_edit.min(edit);
+        }
+        
+        // 计算所有拼音首字母的最佳匹配得分
+        let mut best_initials_lcs_sub = 0;
+        let mut best_initials_lcs_seq = 0;
+        let mut best_initials_edit = usize::MAX;
+        for initials in &name_pinyin_initials_multi {
+            let lcs_sub = longest_common_substring_len(initials, &query_lower);
+            let lcs_seq = longest_common_subsequence_len(initials, &query_lower);
+            let edit = levenshtein_distance(initials, &query_lower);
+            
+            best_initials_lcs_sub = best_initials_lcs_sub.max(lcs_sub);
+            best_initials_lcs_seq = best_initials_lcs_seq.max(lcs_seq);
+            best_initials_edit = best_initials_edit.min(edit);
+        }
 
-        scored.push((name, lcs_sub, lcs_seq, edit));
+        // 取所有匹配方式中的最佳得分
+        let best_lcs_sub = lcs_sub.max(best_pinyin_lcs_sub).max(best_initials_lcs_sub);
+        let best_lcs_seq = lcs_seq.max(best_pinyin_lcs_seq).max(best_initials_lcs_seq);
+        let best_edit = edit.min(best_pinyin_edit).min(best_initials_edit);
+
+        scored.push((name, best_lcs_sub, best_lcs_seq, best_edit));
     }
 
     scored.sort_by(|a, b| {
@@ -325,11 +390,69 @@ fn open_folder(folder_name: String) -> Result<(), String> {
     Ok(())
 }
 
+// 导入笔记（打开文件选择对话框）
+#[tauri::command]
+async fn import_note(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+    
+    let file_path = app.dialog()
+        .file()
+        .add_filter("文本文件", &["md", "txt"])
+        .blocking_pick_file();
+    
+    match file_path {
+        Some(path) => {
+            if let Some(path_ref) = path.as_path() {
+                let path_str = path_ref.to_string_lossy().to_string();
+                Ok(path_str)
+            } else {
+                Ok(String::new())
+            }
+        },
+        None => Ok(String::new()) // 用户取消选择
+    }
+}
+
+// 创建新笔记
+#[tauri::command]
+fn create_note(name: String, base_dir: String) -> Result<String, String> {
+    let base_path = PathBuf::from(&base_dir);
+    
+    // 确保目录存在
+    if !base_path.exists() {
+        fs::create_dir_all(&base_path).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+    
+    let file_path = base_path.join(&name);
+    
+    // 创建空文件
+    fs::write(&file_path, "").map_err(|e| format!("创建文件失败: {}", e))?;
+    
+    // 返回完整路径
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+// 删除笔记文件
+#[tauri::command]
+fn delete_note_file(path: String) -> Result<(), String> {
+    let file_path = PathBuf::from(&path);
+    
+    if !file_path.exists() {
+        return Err(format!("文件不存在: {}", path));
+    }
+    
+    fs::remove_file(&file_path).map_err(|e| format!("删除文件失败: {}", e))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .invoke_handler(tauri::generate_handler![
             greet,
             read_note,
@@ -337,9 +460,9 @@ pub fn run() {
             list_notes,
             search_workspaces,
             open_folder,
-            read_config,
-            save_config,
-            update_font_size
+            import_note,
+            create_note,
+            delete_note_file
         ])
         .setup(|app| {
             // 跟踪主窗口焦点状态（不再在失焦时自动隐藏）
@@ -355,9 +478,10 @@ pub fn run() {
 
             // 创建托盘菜单
             let show_hide = MenuItemBuilder::with_id("show_hide", "显示/隐藏窗口").build(app)?;
+            let settings = MenuItemBuilder::with_id("settings", "设置").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
-            let menu = MenuBuilder::new(app).items(&[&show_hide, &quit]).build()?;
+            let menu = MenuBuilder::new(app).items(&[&show_hide, &settings, &quit]).build()?;
 
             // 创建系统托盘图标
             let _tray = TrayIconBuilder::new()
@@ -379,6 +503,19 @@ pub fn run() {
                                 }
                                 let _ = window.show();
                                 let _ = window.set_focus();
+                            }
+                        }
+                    }
+                    "settings" => {
+                        // 检查设置窗口是否已存在
+                        if let Some(settings_window) = app.get_webview_window("settings") {
+                            // 如果存在，显示并聚焦
+                            let _ = settings_window.show();
+                            let _ = settings_window.set_focus();
+                        } else {
+                            // 如果不存在，发送事件给主窗口创建（不显示主窗口）
+                            if let Some(main_window) = app.get_webview_window("main") {
+                                let _ = main_window.emit("open-settings", ());
                             }
                         }
                     }
@@ -450,62 +587,16 @@ pub fn run() {
                                     }
                                 }
                             }
-                            // Ctrl+Space: 切换搜索窗口显示/隐藏
+                            // Ctrl+Space: 切换搜索窗口显示/隐藏（窗口已预创建）
                             else if received_shortcut == &ctrl_space {
                                 if let Some(search_window) = app_handle.get_webview_window("search")
                                 {
-                                    // 搜索窗口已存在，切换显示状态
+                                    // 切换显示状态
                                     if search_window.is_visible().unwrap_or(false) {
                                         let _ = search_window.hide();
                                     } else {
                                         let _ = search_window.show();
                                         let _ = search_window.set_focus();
-                                    }
-                                } else {
-                                    // 搜索窗口不存在，创建它
-                                    use tauri::WebviewWindowBuilder;
-
-                                    let result = if cfg!(debug_assertions) {
-                                        // 开发模式：使用路由 /#/search
-                                        WebviewWindowBuilder::new(
-                                            app_handle,
-                                            "search",
-                                            tauri::WebviewUrl::External(
-                                                "http://localhost:1420/#/search".parse().unwrap(),
-                                            ),
-                                        )
-                                    } else {
-                                        // 生产模式：使用路由 /#/search
-                                        WebviewWindowBuilder::new(
-                                            app_handle,
-                                            "search",
-                                            tauri::WebviewUrl::App("index.html#/search".into()),
-                                        )
-                                    }
-                                    .title("搜索工作区")
-                                    .inner_size(600.0, 400.0)
-                                    .decorations(false) // 移除窗口装饰
-                                    .always_on_top(true)
-                                    .center()
-                                    .resizable(false)
-                                    .skip_taskbar(true)
-                                    .visible(false)
-                                    .transparent(true) // 设置窗口透明
-                                    .shadow(false) // 移除窗口阴影和边框
-                                    .build();
-
-                                    if let Ok(window) = result {
-                                        // 为搜索窗口添加失焦自动隐藏功能
-                                        let window_clone = window.clone();
-                                        window.on_window_event(move |event| {
-                                            if let WindowEvent::Focused(false) = event {
-                                                // 窗口失去焦点时自动隐藏
-                                                let _ = window_clone.hide();
-                                            }
-                                        });
-
-                                        let _ = window.show();
-                                        let _ = window.set_focus();
                                     }
                                 }
                             }
@@ -513,6 +604,40 @@ pub fn run() {
                     })
                     .build(),
             )?;
+
+            // 预创建搜索窗口（隐藏），提升首次打开速度
+            use tauri::WebviewWindowBuilder;
+            let search_window_result = if cfg!(debug_assertions) {
+                // 开发模式
+                WebviewWindowBuilder::new(app, "search", tauri::WebviewUrl::App("/#/search".into()))
+            } else {
+                // 生产模式
+                WebviewWindowBuilder::new(app, "search", tauri::WebviewUrl::App("/".into()))
+                    .initialization_script("window.location.hash = '#/search';")
+            };
+            
+            if let Ok(search_window) = search_window_result
+                .title("搜索工作区")
+                .inner_size(700.0, 500.0)
+                .resizable(false)
+                .decorations(false)
+                .transparent(true)
+                .shadow(false) // 移除窗口阴影和边框
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible(false) // 默认隐藏
+                .center()
+                .build()
+            {
+                // 为搜索窗口添加失焦自动隐藏功能
+                let search_window_clone = search_window.clone();
+                search_window.on_window_event(move |event| {
+                    if let WindowEvent::Focused(false) = event {
+                        // 窗口失去焦点时自动隐藏
+                        let _ = search_window_clone.hide();
+                    }
+                });
+            }
 
             // 注册 Alt+Space 快捷键
             let _ = app.global_shortcut().register(alt_space);
