@@ -1,5 +1,18 @@
 <template>
   <div class="text-editor-container">
+    <!-- 保存状态指示器 -->
+    <transition name="fade">
+      <div v-if="showSaveStatus" class="save-status-indicator">
+        <NSpin v-if="saveStatus === 'saving'" :size="18" />
+        <NIcon v-else-if="saveStatus === 'saved'" size="20" color="#52c41a">
+          <CheckmarkCircleOutline />
+        </NIcon>
+        <NIcon v-else-if="saveStatus === 'failed'" size="20" color="#f5222d">
+          <CloseCircleOutline />
+        </NIcon>
+      </div>
+    </transition>
+    
     <textarea
       ref="textareaRef"
       v-model="localValue"
@@ -19,6 +32,8 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
+import { NIcon, NSpin } from 'naive-ui';
+import { CheckmarkCircleOutline, CloseCircleOutline } from '@vicons/ionicons5';
 
 interface Props {
   modelValue: string;
@@ -27,6 +42,7 @@ interface Props {
   fontSize?: number;
   fontFamily?: string;
   lineHeight?: number;
+  saveStatus?: string;
 }
 
 interface Emits {
@@ -40,7 +56,8 @@ const props = withDefaults(defineProps<Props>(), {
   height: '100%',
   fontSize: 16,
   fontFamily: "Consolas, 'Courier New', monospace",
-  lineHeight: 1.6
+  lineHeight: 1.6,
+  saveStatus: ''
 });
 
 const emit = defineEmits<Emits>();
@@ -50,6 +67,31 @@ const localValue = ref(props.modelValue);
 const fontSize = ref(props.fontSize);
 const fontFamily = ref(props.fontFamily);
 const lineHeight = ref(props.lineHeight);
+const showSaveStatus = ref(false);
+let hideTimer: number | null = null;
+
+// 监听保存状态变化
+watch(() => props.saveStatus, (newStatus) => {
+  if (newStatus) {
+    showSaveStatus.value = true;
+    
+    // 清除之前的定时器
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+    
+    // 只有成功状态才自动隐藏
+    if (newStatus === 'saved') {
+      hideTimer = window.setTimeout(() => {
+        showSaveStatus.value = false;
+        hideTimer = null;
+      }, 450);  // 450ms 后隐藏
+    }
+  } else {
+    showSaveStatus.value = false;
+  }
+});
 
 // 处理输入事件
 const handleInput = () => {
@@ -167,6 +209,29 @@ onMounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+/* 保存状态指示器 */
+.save-status-indicator {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* 淡入淡出动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 .text-editor {

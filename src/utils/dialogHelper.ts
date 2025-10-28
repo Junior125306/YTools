@@ -1,4 +1,7 @@
-import { message, ask, confirm } from '@tauri-apps/plugin-dialog';
+import { createDiscreteApi } from 'naive-ui'
+
+// 创建独立的 message 和 dialog API（无需 Provider 包裹）
+const { message, dialog } = createDiscreteApi(['message', 'dialog'])
 
 /**
  * 显示信息提示框
@@ -6,10 +9,7 @@ import { message, ask, confirm } from '@tauri-apps/plugin-dialog';
  * @param title 标题（可选）
  */
 export async function showInfo(text: string, title = '提示'): Promise<void> {
-  await message(text, {
-    title,
-    kind: 'info'
-  });
+  message.info(text, { duration: 2500 })
 }
 
 /**
@@ -18,10 +18,7 @@ export async function showInfo(text: string, title = '提示'): Promise<void> {
  * @param title 标题（可选）
  */
 export async function showWarning(text: string, title = '警告'): Promise<void> {
-  await message(text, {
-    title,
-    kind: 'warning'
-  });
+  message.warning(text, { duration: 3000 })
 }
 
 /**
@@ -30,10 +27,7 @@ export async function showWarning(text: string, title = '警告'): Promise<void>
  * @param title 标题（可选）
  */
 export async function showError(text: string, title = '错误'): Promise<void> {
-  await message(text, {
-    title,
-    kind: 'error'
-  });
+  message.error(text, { duration: 3000 })
 }
 
 /**
@@ -43,10 +37,17 @@ export async function showError(text: string, title = '错误'): Promise<void> {
  * @returns true 表示确认，false 表示取消
  */
 export async function showConfirm(text: string, title = '确认'): Promise<boolean> {
-  return await confirm(text, {
-    title,
-    kind: 'warning'
-  });
+  return new Promise((resolve) => {
+    dialog.warning({
+      title,
+      content: text,
+      positiveText: '确定',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false)
+    })
+  })
 }
 
 /**
@@ -59,7 +60,17 @@ export async function showAsk(
   text: string, 
   title = '询问'
 ): Promise<boolean | null> {
-  return await ask(text, { title });
+  return new Promise((resolve) => {
+    dialog.info({
+      title,
+      content: text,
+      positiveText: '是',
+      negativeText: '否',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(null)
+    })
+  })
 }
 
 /**
@@ -68,9 +79,6 @@ export async function showAsk(
  * @param title 标题（可选）
  */
 export async function showSuccess(text: string, title = '成功'): Promise<void> {
-  await message(text, {
-    title,
-    kind: 'info'
-  });
+  message.success(text, { duration: 2500 })
 }
 

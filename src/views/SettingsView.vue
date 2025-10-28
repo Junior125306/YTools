@@ -1,134 +1,21 @@
-<template>
-  <div class="settings-window">
-    <div class="settings-container">
-      <div class="settings-header">
-        <h2 class="settings-title">设置</h2>
-        <button class="close-btn" @click="closeWindow" title="关闭 (ESC)">
-          ×
-        </button>
-      </div>
-      
-      <div class="settings-body">
-        <!-- 通用设置 -->
-        <section class="settings-section">
-          <h4 class="section-title">通用设置</h4>
-          <div class="setting-item">
-            <label class="setting-label">
-              <input
-                type="checkbox"
-                v-model="localConfig.autoStart"
-                class="setting-checkbox"
-              />
-              <span>开机启动</span>
-            </label>
-          </div>
-        </section>
-
-        <!-- 编辑器设置 -->
-        <section class="settings-section">
-          <h4 class="section-title">编辑器设置</h4>
-          
-          <div class="setting-item">
-            <div class="setting-label-block">
-              字体大小
-            </div>
-            <div class="font-size-control">
-              <button @click="decreaseFontSize" class="size-btn no-drag">-</button>
-              <span class="size-value">{{ localConfig.fontSize }}px</span>
-              <button @click="increaseFontSize" class="size-btn no-drag">+</button>
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <label class="setting-label-block">
-              字体族
-              <select v-model="localConfig.fontFamily" class="setting-select">
-                <option value="Consolas, 'Courier New', monospace">Consolas (等宽)</option>
-                <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
-                <option value="'SimHei', sans-serif">黑体</option>
-                <option value="'KaiTi', serif">楷体</option>
-                <option value="monospace">系统等宽字体</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="setting-item">
-            <label class="setting-label-block">
-              行高
-              <select v-model.number="localConfig.lineHeight" class="setting-select">
-                <option :value="1.4">1.4 (紧凑)</option>
-                <option :value="1.6">1.6 (标准)</option>
-                <option :value="1.8">1.8 (舒适)</option>
-                <option :value="2.0">2.0 (宽松)</option>
-              </select>
-            </label>
-          </div>
-        </section>
-
-        <!-- 搜索设置 -->
-        <section class="settings-section">
-          <h4 class="section-title">搜索设置</h4>
-          <div class="setting-item">
-            <div class="setting-label-block">
-              搜索目录
-              <div class="directory-list">
-                <div
-                  v-for="(dir, index) in localConfig.searchDirectories"
-                  :key="index"
-                  class="directory-item"
-                >
-                  <span class="directory-path">{{ dir }}</span>
-                  <button @click="removeDirectory(index)" class="remove-btn">删除</button>
-                </div>
-                <div v-if="localConfig.searchDirectories.length === 0" class="empty-hint">
-                  暂无搜索目录
-                </div>
-              </div>
-              <button @click="addDirectory" class="add-btn">添加目录</button>
-            </div>
-          </div>
-        </section>
-
-        <!-- 笔记设置 -->
-        <section class="settings-section">
-          <h4 class="section-title">笔记设置</h4>
-          <div class="setting-item">
-            <label class="setting-label-block">
-              默认笔记位置
-              <div class="path-selector">
-                <input
-                  type="text"
-                  v-model="localConfig.defaultNotesLocation"
-                  readonly
-                  class="path-input"
-                  placeholder="使用默认位置 (.ytools)"
-                />
-                <button @click="selectNotesLocation" class="browse-btn">浏览</button>
-              </div>
-            </label>
-          </div>
-        </section>
-      </div>
-
-      <div class="settings-footer">
-        <button class="settings-button settings-button-reset" @click="handleReset">
-          重置为默认
-        </button>
-        <div class="footer-right">
-          <button class="settings-button settings-button-save" @click="handleSave">
-            保存
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { open } from '@tauri-apps/plugin-dialog';
-import { enable as enableAutostart, disable as disableAutostart } from '@tauri-apps/plugin-autostart';
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
+import { enable as enableAutostart, disable as disableAutostart } from '@tauri-apps/plugin-autostart'
+import { homeDir } from '@tauri-apps/api/path'
+import {
+  NForm, NFormItem, NRadioGroup, NRadioButton,
+  NSwitch, NInputNumber, NSelect, NList, NListItem,
+  NButton, NSpace, NIcon, NText, NDivider, useThemeVars, useMessage
+} from 'naive-ui'
+import { AddOutline, TrashOutline, CloseOutline, SettingsOutline } from '@vicons/ionicons5'
+import { useTheme } from '../composables/useTheme'
+
+const themeVars = useThemeVars()
+const message = useMessage()
+
 import {
   getConfig,
   setFontSize,
@@ -137,12 +24,13 @@ import {
   setAutoStart,
   setSearchDirectories,
   setDefaultNotesLocation,
+  setTheme,
   resetConfig,
   type AppConfig
-} from '../utils/configStore';
-import { showError, showInfo } from '../utils/dialogHelper';
+} from '../utils/configStore'
 
-const currentWindow = getCurrentWindow();
+const currentWindow = getCurrentWindow()
+const { changeTheme } = useTheme()
 
 const localConfig = ref<AppConfig>({
   fontSize: 16,
@@ -151,36 +39,61 @@ const localConfig = ref<AppConfig>({
   autoStart: false,
   searchDirectories: [],
   defaultNotesLocation: '',
-  notes: []
-});
+  notes: [],
+  theme: 'system'
+})
+
+// 加载状态
+const isLoading = ref(true)
+
+// 计算显示的路径（实际路径或提示文本）
+const displayPath = computed(() => {
+  return localConfig.value.defaultNotesLocation || '使用默认位置 (~/.ytools)'
+})
+
+// 获取实际要复制的路径
+const getActualPath = async () => {
+  if (localConfig.value.defaultNotesLocation) {
+    return localConfig.value.defaultNotesLocation
+  }
+  // 如果没有自定义路径，使用默认路径
+  const home = await homeDir()
+  return `${home}.ytools`
+}
+
+// 字体族选项
+const fontFamilyOptions = [
+  { label: 'Consolas (等宽)', value: "Consolas, 'Courier New', monospace" },
+  { label: '微软雅黑', value: "'Microsoft YaHei', sans-serif" },
+  { label: '黑体', value: "'SimHei', sans-serif" },
+  { label: '楷体', value: "'KaiTi', serif" },
+  { label: '系统等宽字体', value: "monospace" }
+]
+
+// 行高选项
+const lineHeightOptions = [
+  { label: '1.4 (紧凑)', value: 1.4 },
+  { label: '1.6 (标准)', value: 1.6 },
+  { label: '1.8 (舒适)', value: 1.8 },
+  { label: '2.0 (宽松)', value: 2.0 }
+]
 
 // 加载配置
 const loadSettings = async () => {
   try {
-    const config = await getConfig();
-    // 确保 searchDirectories 总是一个数组
+    isLoading.value = true
+    const config = await getConfig()
     localConfig.value = { 
       ...config,
       searchDirectories: Array.isArray(config.searchDirectories) ? config.searchDirectories : []
-    };
+    }
   } catch (error) {
-    console.error('加载设置失败:', error);
-    await showError('加载设置失败');
+    console.error('加载设置失败:', error)
+    message.error('加载设置失败')
+  } finally {
+    isLoading.value = false
   }
-};
-
-// 字体大小调整
-const increaseFontSize = () => {
-  if (localConfig.value.fontSize < 32) {
-    localConfig.value.fontSize += 2;
-  }
-};
-
-const decreaseFontSize = () => {
-  if (localConfig.value.fontSize > 12) {
-    localConfig.value.fontSize -= 2;
-  }
-};
+}
 
 // 添加搜索目录
 const addDirectory = async () => {
@@ -189,27 +102,26 @@ const addDirectory = async () => {
       directory: true,
       multiple: false,
       title: '选择搜索目录'
-    });
+    })
     
     if (selected && typeof selected === 'string') {
-      // 确保 searchDirectories 是一个数组
       if (!Array.isArray(localConfig.value.searchDirectories)) {
-        localConfig.value.searchDirectories = [];
+        localConfig.value.searchDirectories = []
       }
       if (!localConfig.value.searchDirectories.includes(selected)) {
-        localConfig.value.searchDirectories.push(selected);
+        localConfig.value.searchDirectories.push(selected)
       }
     }
   } catch (error) {
-    console.error('选择目录失败:', error);
-    await showError('选择目录失败');
+    console.error('选择目录失败:', error)
+    message.error('选择目录失败')
   }
-};
+}
 
 // 删除搜索目录
 const removeDirectory = (index: number) => {
-  localConfig.value.searchDirectories.splice(index, 1);
-};
+  localConfig.value.searchDirectories.splice(index, 1)
+}
 
 // 选择笔记位置
 const selectNotesLocation = async () => {
@@ -218,454 +130,341 @@ const selectNotesLocation = async () => {
       directory: true,
       multiple: false,
       title: '选择默认笔记位置'
-    });
+    })
     
     if (selected && typeof selected === 'string') {
-      localConfig.value.defaultNotesLocation = selected;
+      localConfig.value.defaultNotesLocation = selected
     }
   } catch (error) {
-    console.error('选择目录失败:', error);
-    await showError('选择目录失败');
+    console.error('选择目录失败:', error)
+    message.error('选择目录失败')
   }
-};
+}
+
+// 打开路径所在目录
+const handleOpenPath = async () => {
+  try {
+    const path = await getActualPath()
+    // 调用 Rust 命令打开文件夹
+    await invoke('open_directory', { path })
+  } catch (error) {
+    console.error('打开目录失败:', error)
+    message.error('打开目录失败')
+  }
+}
 
 // 保存设置
 const handleSave = async () => {
   try {
-    await setFontSize(localConfig.value.fontSize);
-    await setFontFamily(localConfig.value.fontFamily);
-    await setLineHeight(localConfig.value.lineHeight);
-    await setAutoStart(localConfig.value.autoStart);
-    await setSearchDirectories(localConfig.value.searchDirectories);
-    await setDefaultNotesLocation(localConfig.value.defaultNotesLocation);
+    await setFontSize(localConfig.value.fontSize)
+    await setFontFamily(localConfig.value.fontFamily)
+    await setLineHeight(localConfig.value.lineHeight)
+    await setAutoStart(localConfig.value.autoStart)
+    await setSearchDirectories(localConfig.value.searchDirectories)
+    await setDefaultNotesLocation(localConfig.value.defaultNotesLocation)
+    await setTheme(localConfig.value.theme)
+
+    // 应用主题切换
+    changeTheme(localConfig.value.theme as 'light' | 'dark' | 'system')
 
     // 应用开机启动设置
     try {
       if (localConfig.value.autoStart) {
-        await enableAutostart();
+        await enableAutostart()
       } else {
-        await disableAutostart();
+        await disableAutostart()
       }
     } catch (error) {
-      console.error('设置开机启动失败:', error);
+      console.error('设置开机启动失败:', error)
     }
 
     // 通知主窗口重新加载配置
     try {
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const mainWindow = await WebviewWindow.getByLabel('main');
+      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+      const mainWindow = await WebviewWindow.getByLabel('main')
       if (mainWindow) {
-        await mainWindow.emit('settings-saved', {});
+        await mainWindow.emit('settings-saved', {})
       }
     } catch (error) {
-      console.error('通知主窗口失败:', error);
+      console.error('通知主窗口失败:', error)
     }
 
-    await showInfo('设置已保存');
-    await currentWindow.hide();
+    // 显示成功提示（不关闭窗口）
+    message.success('设置已保存', { duration: 2000 })
   } catch (error) {
-    console.error('保存设置失败:', error);
-    await showError('保存设置失败');
+    console.error('保存设置失败:', error)
+    message.error('保存设置失败')
   }
-};
+}
 
 // 重置为默认值
 const handleReset = async () => {
   try {
-    await resetConfig();
-    await loadSettings(); // 重新加载配置
-    await showInfo('已重置为默认设置');
+    await resetConfig()
+    await loadSettings()
+    message.success('已重置为默认设置', { duration: 2000 })
   } catch (error) {
-    console.error('重置设置失败:', error);
-    await showError('重置设置失败');
+    console.error('重置设置失败:', error)
+    message.error('重置设置失败')
   }
-};
+}
 
 // 关闭窗口
 const closeWindow = async () => {
-  await currentWindow.hide();
-};
+  await currentWindow.hide()
+}
 
 // 处理键盘事件
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
-    closeWindow();
+    closeWindow()
   }
-};
+}
 
 // 初始化
 onMounted(async () => {
-  await loadSettings();
-  
-  // 只在窗口第一次显示时加载配置，而不是每次获得焦点都加载
-  // 这样可以避免在选择目录时覆盖用户的修改
-  
-  document.addEventListener('keydown', handleKeydown);
-});
+  await loadSettings()
+  document.addEventListener('keydown', handleKeydown)
+})
 
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown);
-});
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
+
+<template>
+  <div class="settings-window">
+    <!-- 固定头部 -->
+    <div class="settings-header">
+      <h2 class="settings-title">设置</h2>
+      <NButton text circle @click="closeWindow" title="关闭 (ESC)" class="close-button">
+        <template #icon>
+          <NIcon size="20"><CloseOutline /></NIcon>
+        </template>
+      </NButton>
+    </div>
+
+    <!-- 可滚动内容区域 -->
+    <div class="settings-content">
+      <!-- 加载状态 -->
+      <div v-if="isLoading" class="loading-container">
+        <NSpace vertical align="center" :size="16">
+          <NIcon size="40" :component="SettingsOutline" />
+          <NText depth="3">加载设置中...</NText>
+        </NSpace>
+      </div>
+
+      <NForm v-else label-placement="left" label-width="100">
+        <!-- 主题设置 -->
+        <NDivider title-placement="left">主题设置</NDivider>
+        <NFormItem label="主题模式">
+          <NRadioGroup v-model:value="localConfig.theme">
+            <NRadioButton value="light">亮色</NRadioButton>
+            <NRadioButton value="dark">暗色</NRadioButton>
+            <NRadioButton value="system">跟随系统</NRadioButton>
+          </NRadioGroup>
+        </NFormItem>
+
+        <!-- 通用设置 -->
+        <NDivider title-placement="left">通用设置</NDivider>
+        <NFormItem label="开机启动">
+          <NSwitch v-model:value="localConfig.autoStart" />
+        </NFormItem>
+
+        <!-- 编辑器设置 -->
+        <NDivider title-placement="left">编辑器设置</NDivider>
+        
+        <NFormItem label="字体大小">
+          <NInputNumber 
+            v-model:value="localConfig.fontSize" 
+            :min="12" 
+            :max="32"
+            :step="2"
+            style="width: 150px"
+          >
+            <template #suffix>px</template>
+          </NInputNumber>
+        </NFormItem>
+
+        <NFormItem label="字体族">
+          <NSelect 
+            v-model:value="localConfig.fontFamily" 
+            :options="fontFamilyOptions"
+            style="width: 100%"
+          />
+        </NFormItem>
+
+        <NFormItem label="行高">
+          <NSelect 
+            v-model:value="localConfig.lineHeight" 
+            :options="lineHeightOptions"
+            style="width: 150px"
+          />
+        </NFormItem>
+
+        <!-- 搜索设置 -->
+        <NDivider title-placement="left">搜索设置</NDivider>
+        <NFormItem label="搜索目录">
+          <NSpace vertical style="width: 100%">
+            <NList v-if="localConfig.searchDirectories.length > 0" bordered style="max-height: 200px; overflow-y: auto">
+              <NListItem v-for="(dir, index) in localConfig.searchDirectories" :key="index">
+                <template #suffix>
+                  <NButton text @click="removeDirectory(index)" type="error">
+                    <template #icon>
+                      <NIcon><TrashOutline /></NIcon>
+                    </template>
+                  </NButton>
+                </template>
+                <NText>{{ dir }}</NText>
+              </NListItem>
+            </NList>
+            <NText v-else depth="3" style="padding: 16px; text-align: center">
+              暂无搜索目录
+            </NText>
+            <NButton @click="addDirectory" dashed block>
+              <template #icon>
+                <NIcon><AddOutline /></NIcon>
+              </template>
+              添加目录
+            </NButton>
+          </NSpace>
+        </NFormItem>
+
+        <!-- 笔记设置 -->
+        <NDivider title-placement="left">笔记设置</NDivider>
+        <NFormItem label="默认笔记位置">
+          <div class="notes-location-container">
+            <NText 
+              class="notes-location-path"
+              :title="displayPath"
+              @click="handleOpenPath"
+            >
+              {{ displayPath }}
+            </NText>
+            <NButton @click="selectNotesLocation" size="small">修改</NButton>
+          </div>
+        </NFormItem>
+      </NForm>
+    </div>
+
+    <!-- 固定底部 -->
+    <div class="settings-footer">
+      <NButton @click="handleReset" type="error" secondary size="small">
+        重置为默认
+      </NButton>
+      <NSpace :size="8">
+        <NButton @click="closeWindow" size="small">取消</NButton>
+        <NButton @click="handleSave" type="primary" size="small">保存</NButton>
+      </NSpace>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .settings-window {
   width: 100vw;
   height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: var(--color-bg);
-}
-
-.settings-container {
-  width: 100%;
-  height: 100%;
-  background: var(--color-surface);
-  display: flex;
   flex-direction: column;
+  background-color: v-bind('themeVars.bodyColor');
   overflow: hidden;
 }
 
+/* 固定头部 */
 .settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-2);
+  border-bottom: 1px solid v-bind('themeVars.dividerColor');
+  background-color: v-bind('themeVars.cardColor');
+  flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
 .settings-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--color-text);
+  color: v-bind('themeVars.textColor1');
 }
 
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  font-size: 32px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+.close-button {
+  -webkit-app-region: no-drag;
 }
 
-.close-btn:hover {
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
-.settings-body {
+/* 可滚动内容区域 */
+.settings-content {
   flex: 1;
-  padding: 20px;
   overflow-y: auto;
+  padding: 16px 20px;
 }
 
-.settings-body::-webkit-scrollbar {
-  width: 8px;
+/* 自定义细滚动条 */
+.settings-content::-webkit-scrollbar {
+  width: 6px;
 }
 
-.settings-body::-webkit-scrollbar-track {
+.settings-content::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.settings-body::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-text) 12%, transparent);
-  border-radius: 4px;
+.settings-content::-webkit-scrollbar-thumb {
+  background: v-bind('themeVars.scrollbarColor');
+  border-radius: 3px;
 }
 
-.settings-body::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--color-text) 20%, transparent);
+.settings-content::-webkit-scrollbar-thumb:hover {
+  background: v-bind('themeVars.scrollbarColorHover');
 }
 
-.settings-section {
-  margin-bottom: 32px;
-}
-
-.settings-section:last-child {
-  margin-bottom: 0;
-}
-
-.section-title {
-  margin: 0 0 16px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-accent);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.setting-item {
-  margin-bottom: 16px;
-}
-
-.setting-item:last-child {
-  margin-bottom: 0;
-}
-
-.setting-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--color-text);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.setting-label-block {
-  display: block;
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 8px;
-}
-
-.setting-checkbox {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.font-size-control {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.size-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 18px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.size-btn:hover {
-  background: var(--color-accent);
-  color: white;
-  border-color: var(--color-accent);
-}
-
-.size-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text);
-  min-width: 50px;
-  text-align: center;
-}
-
-.setting-select {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: 14px;
-  cursor: pointer;
-  margin-top: 8px;
-}
-
-.setting-select:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-
-.directory-list {
-  margin-top: 8px;
-  margin-bottom: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-bg);
-  padding: 8px;
-  min-height: 80px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.directory-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px;
-  background: var(--color-surface);
-  border-radius: 4px;
-  margin-bottom: 6px;
-}
-
-.directory-item:last-child {
-  margin-bottom: 0;
-}
-
-.directory-path {
-  flex: 1;
-  font-size: 13px;
-  color: var(--color-text);
-  word-break: break-all;
-}
-
-.remove-btn {
-  padding: 4px 12px;
-  border: 1px solid #ef4444;
-  background: transparent;
-  color: #ef4444;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.remove-btn:hover {
-  background: #ef4444;
-  color: white;
-}
-
-.empty-hint {
-  padding: 16px;
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: 13px;
-}
-
-.add-btn {
-  width: 100%;
-  padding: 8px 16px;
-  border: 1px dashed var(--color-border);
-  background: transparent;
-  color: var(--color-text);
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.add-btn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  background: rgba(129, 140, 248, 0.05);
-}
-
-.path-selector {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.path-input {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: 14px;
-}
-
-.path-input::placeholder {
-  color: var(--color-text-muted);
-}
-
-.browse-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.browse-btn:hover {
-  background: var(--color-accent);
-  color: white;
-  border-color: var(--color-accent);
-}
-
+/* 固定底部 */
 .settings-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface-2);
+  padding: 12px 20px;
+  border-top: 1px solid v-bind('themeVars.dividerColor');
+  background-color: v-bind('themeVars.cardColor');
+  flex-shrink: 0;
 }
 
-.footer-right {
+.loading-container {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 60px 20px;
 }
 
-.settings-button {
-  padding: 10px 24px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
+/* 默认笔记位置样式 */
+.notes-location-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.notes-location-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
-  outline: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  font-size: 13px;
 }
 
-.settings-button-save {
-  background: var(--color-accent);
-  color: white;
+.notes-location-path:hover {
+  background-color: v-bind('themeVars.hoverColor');
+  color: v-bind('themeVars.primaryColor');
 }
 
-.settings-button-save:hover {
-  background: var(--color-accent-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(129, 140, 248, 0.3);
-}
-
-.settings-button-reset {
-  background: transparent;
-  color: #ef4444;
-  border: 1px solid #ef4444;
-}
-
-.settings-button-reset:hover {
-  background: #ef4444;
-  color: white;
+/* 全局 message 样式调整 - 调整到垂直中间 */
+:deep(.n-message-container) {
+  top: 50% !important;
+  transform: translateY(-50%) !important;
 }
 </style>
-
-<style>
-/* 为设置窗口设置背景 */
-body:has(.settings-window) {
-  background: var(--color-bg) !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-html:has(.settings-window) {
-  background: var(--color-bg) !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-#app:has(.settings-window) {
-  background: var(--color-bg) !important;
-}
-</style>
-

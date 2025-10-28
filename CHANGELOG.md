@@ -16,6 +16,39 @@
 - 远程桌面快捷方式
 - 工单管理系统
 
+## [0.4.0] - 2025-10-28
+
+### Added (新增)
+
+- ✨ **主题系统**
+  - 支持亮色/暗色主题切换
+  - 支持跟随系统主题自动切换
+  - 新增主题配置中心（设置页面）
+  - 实时主题切换，无需重启应用
+- ✨ **优化的配色方案**
+  - 亮色主题：柔和的米白色背景（stone-100/stone-50）
+  - 暗色主题：深色护眼配色（Naive UI 默认暗色）
+  - 统一的紫色主调（violet 系列）
+
+### Changed (变更)
+
+- ♻️ **全面主题化重构**
+  - 所有视图和组件支持主题切换（HomeView、SearchView、SettingsView）
+  - 新增 `useTheme` composable 统一管理主题状态
+  - 主题配置持久化存储并在所有窗口间同步
+  - App.vue 使用主题背景色替代硬编码颜色
+- ♻️ **搜索界面优化**
+  - 选中项背景无圆角，避免底色露出
+  - 细滚动条样式（6px 宽度）
+  - 搜索窗口保持透明背景浮动效果
+
+### Technical (技术)
+
+- 新增 `src/composables/useTheme.ts` 主题管理模块
+- 分离亮色和暗色主题覆盖配置
+- 使用 Naive UI `useThemeVars` 实现动态主题绑定
+- 主题变更事件广播到所有窗口
+
 ## [0.3.0] - 2025-01-28
 
 ### Added (新增)
@@ -176,7 +209,8 @@
 
 ---
 
-[Unreleased]: https://github.com/yourusername/ytools/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/yourusername/ytools/releases/tag/v0.4.0
 [0.3.0]: https://github.com/yourusername/ytools/releases/tag/v0.3.0
 [0.2.1]: https://github.com/yourusername/ytools/releases/tag/v0.2.1
 [0.1.0]: https://github.com/yourusername/ytools/releases/tag/v0.1.0

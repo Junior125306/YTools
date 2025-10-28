@@ -28,6 +28,36 @@ fn get_ytools_dir() -> Result<PathBuf, String> {
     Ok(ytools_dir)
 }
 
+// 打开文件夹（使用系统文件管理器）
+#[tauri::command]
+fn open_directory(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("打开目录失败: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("打开目录失败: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("打开目录失败: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 // 读取 markdown 文件
 #[tauri::command]
 fn read_note(filename: String) -> Result<String, String> {
@@ -462,7 +492,8 @@ pub fn run() {
             open_folder,
             import_note,
             create_note,
-            delete_note_file
+            delete_note_file,
+            open_directory
         ])
         .setup(|app| {
             // 跟踪主窗口焦点状态（不再在失焦时自动隐藏）
@@ -618,7 +649,7 @@ pub fn run() {
             
             if let Ok(search_window) = search_window_result
                 .title("搜索工作区")
-                .inner_size(700.0, 500.0)
+                .inner_size(650.0, 550.0)
                 .resizable(false)
                 .decorations(false)
                 .transparent(true)

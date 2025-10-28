@@ -2,11 +2,18 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { NTabs, NTabPane, NButton, NIcon, NSpace, NText, useThemeVars } from 'naive-ui';
+import { AddOutline, FolderOpenOutline, SettingsOutline } from '@vicons/ionicons5';
 import TextEditor from '../components/TextEditor.vue';
 import InputDialog from '../components/InputDialog.vue';
 import { initConfig, getFontSize, setFontSize, getFontFamily, getLineHeight, getNotes, addNote, removeNote, getDefaultNotesLocation } from '../utils/configStore';
 import { showError, showInfo, showWarning, showConfirm } from '../utils/dialogHelper';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { useTheme } from '../composables/useTheme';
+
+const themeVars = useThemeVars();
+// 初始化主题并监听主题变更
+useTheme();
 
 // 笔记列表和当前选中的笔记（完整路径）
 const notes = ref<string[]>([]);
@@ -118,20 +125,17 @@ async function saveNote() {
   if (isSaving.value) return;
   
   isSaving.value = true;
-  saveStatus.value = '保存中...';
+  saveStatus.value = 'saving';
   
   try {
     await invoke('save_note', {
       filename: activeNote.value,
       content: content.value,
     });
-    saveStatus.value = '✓ 已保存';
-    setTimeout(() => {
-      saveStatus.value = '';
-    }, 2000);
+    saveStatus.value = 'saved';
   } catch (error) {
     console.error('保存失败:', error);
-    saveStatus.value = '✗ 保存失败';
+    saveStatus.value = 'failed';
     await showError('保存笔记失败，请检查文件权限或磁盘空间');
   } finally {
     isSaving.value = false;
@@ -149,7 +153,7 @@ function switchNote(notePath: string) {
 
 // 处理内容变化
 function handleContentChange() {
-  saveStatus.value = '未保存';
+  // 不再显示"未保存"状态，只在保存时显示图标
 }
 
 // 新建笔记
@@ -270,8 +274,6 @@ watch(content, () => {
     clearTimeout(autoSaveTimer);
   }
   
-  saveStatus.value = '未保存';
-  
   autoSaveTimer = setTimeout(() => {
     saveNote();
   }, 2000) as unknown as number;
@@ -321,15 +323,12 @@ async function hideWindow() {
 // 打开设置窗口
 async function openSettings() {
   try {
-    console.log('尝试打开设置窗口...');
-    
     // 检查窗口是否已存在
     const existingWindows = await WebviewWindow.getAll();
     const existingSettings = existingWindows.find(w => w.label === 'settings');
     
     if (existingSettings) {
       // 如果窗口已存在，直接显示和聚焦
-      console.log('设置窗口已存在，显示窗口');
       await existingSettings.show();
       await existingSettings.setFocus();
       return;
@@ -339,29 +338,21 @@ async function openSettings() {
     const newWindow = new WebviewWindow('settings', {
       url: '/#/settings',
       title: '设置',
-      width: 600,
+      width: 400,
       height: 580,
-      minWidth: 500,
+      minWidth: 350,
       minHeight: 500,
       resizable: true,
       center: true,
       skipTaskbar: true,
       alwaysOnTop: false,
       decorations: false,
-      transparent: true,
+      transparent: false,
       visible: true
-    });
-
-    console.log('设置窗口已创建');
-
-    // 等待窗口创建完成
-    newWindow.once('tauri://created', () => {
-      console.log('设置窗口创建成功');
     });
 
     // 监听窗口关闭事件，重新加载配置
     newWindow.once('tauri://destroyed', async () => {
-      console.log('设置窗口已关闭，重新加载配置');
       await loadConfig();
     });
 
@@ -427,47 +418,87 @@ onUnmounted(() => {
 
 <template>
   <div class="app-container">
-    <!-- 顶部工具栏 -->
-    <div class="toolbar">
-      <div class="tabs">
-        <button
-          v-for="notePath in notes"
-          :key="notePath"
-          :class="['tab', 'no-drag', { active: activeNote === notePath }]"
-          @click="switchNote(notePath)"
-          @contextmenu.prevent="deleteNote(notePath)"
-          :title="`${getFileName(notePath)}\n右键删除`"
-        >
-          {{ getFileName(notePath) }}
-        </button>
-        <button class="tab new-tab no-drag" @click="createNote" title="新建笔记">
-          +
-        </button>
-        <button class="tab new-tab no-drag" @click="importNote" title="导入笔记">
-          📁
-        </button>
-        <!-- 拖拽空白区域：用于在 + 按钮右侧拖动窗口 -->
-        <div class="drag-spacer"></div>
-      </div>
-      <div class="actions">
-        <span class="save-status">{{ saveStatus }}</span>
-        <button class="settings-btn no-drag" @click="openSettings" title="设置">
-          ⚙️
-        </button>
-      </div>
-    </div>
+    <!-- Tab 标签页 -->
+    <NTabs
+      v-if="notes.length > 0"
+      v-model:value="activeNote"
+      type="card"
+      addable
+      closable
+      @close="deleteNote"
+      @add="createNote"
+      @update:value="switchNote"
+      class="note-tabs"
+    >
+      <NTabPane
+        v-for="notePath in notes"
+        :key="notePath"
+        :name="notePath"
+        :tab="getFileName(notePath)"
+      >
+        <div class="editor-wrapper">
+          <TextEditor
+            v-model="content"
+            :height="'100%'"
+            :font-size="fontSize"
+            :font-family="fontFamily"
+            :line-height="lineHeight"
+            :save-status="saveStatus"
+            @change="handleContentChange"
+            @update:fontSize="handleFontSizeChange"
+          />
+        </div>
+      </NTabPane>
+      
+      <!-- Tab 尾部插槽：其他操作按钮 -->
+      <template #suffix>
+        <NButton quaternary size="small" @click="importNote" style="margin-left: 16px">
+          <template #icon>
+            <NIcon><FolderOpenOutline /></NIcon>
+          </template>
+          导入
+        </NButton>
+        <NButton quaternary circle size="small" @click="openSettings" style="margin-right: 4px; margin-left: 8px">
+          <template #icon>
+            <NIcon size="18"><SettingsOutline /></NIcon>
+          </template>
+        </NButton>
+      </template>
+    </NTabs>
 
-    <!-- 文本编辑器 -->
-    <div class="editor-container">
-      <TextEditor
-        v-model="content"
-        :height="'100%'"
-        :font-size="fontSize"
-        :font-family="fontFamily"
-        :line-height="lineHeight"
-        @change="handleContentChange"
-        @update:fontSize="handleFontSizeChange"
-      />
+    <!-- 无笔记状态 -->
+    <div v-else class="empty-container">
+      <!-- 顶部工具栏 -->
+      <div class="empty-toolbar">
+        <NSpace align="center">
+          <NButton text size="small" @click="openSettings" title="设置">
+            <template #icon>
+              <NIcon size="18"><SettingsOutline /></NIcon>
+            </template>
+            设置
+          </NButton>
+        </NSpace>
+      </div>
+      <!-- 中间提示区 -->
+      <div class="empty-state">
+        <NSpace vertical align="center">
+          <NText depth="3">暂无笔记</NText>
+          <NSpace>
+            <NButton @click="createNote">
+              <template #icon>
+                <NIcon><AddOutline /></NIcon>
+              </template>
+              新建笔记
+            </NButton>
+            <NButton @click="importNote">
+              <template #icon>
+                <NIcon><FolderOpenOutline /></NIcon>
+              </template>
+              导入笔记
+            </NButton>
+          </NSpace>
+        </NSpace>
+      </div>
     </div>
 
     <!-- 新建笔记对话框 -->
@@ -487,216 +518,85 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  position: relative;
-  /* 强制暗色主题：覆盖变量 */
-  --color-bg: #0f1115;
-  --color-surface: #12151c;
-  --color-surface-2: #161a22;
-  --color-border: #232938;
-  --color-text: #e5e7eb;
-  --color-text-muted: #9ca3af;
-  --color-accent: #818cf8;
-  --color-accent-hover: #6366f1;
-  --color-accent-press: #4f46e5;
-  background: var(--color-bg);
+  background-color: v-bind('themeVars.bodyColor');
 }
 
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  background-color: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  gap: 12px;
-  -webkit-app-region: drag; /* 无边框窗口下可拖拽区域 */
-}
-
-.tabs {
-  display: flex;
-  gap: 4px;
+.note-tabs {
   flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.tabs::-webkit-scrollbar {
-  height: 4px;
-}
-
-.tabs::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 2px;
-}
-
-
-.tab {
+.note-tabs :deep(.n-tabs-nav) {
+  -webkit-app-region: drag;
   padding: 8px 16px;
-  border: 1px solid var(--color-border);
-  background-color: var(--color-surface-2);
-  border-radius: var(--radius-s) var(--radius-s) 0 0;
-  cursor: pointer;
-  font-size: 14px;
-  white-space: nowrap;
-  transition: background var(--tr-fast), color var(--tr-fast), border-color var(--tr-fast);
-  color: var(--color-text-muted);
+  background-color: v-bind('themeVars.cardColor');
+}
+
+.note-tabs :deep(.n-tabs-tab) {
   -webkit-app-region: no-drag;
 }
 
-.tab:hover {
-  background-color: var(--color-surface);
-  color: var(--color-text);
+/* 新增按钮可点击并加宽 */
+.note-tabs :deep(.n-tabs-tab__add) {
+  -webkit-app-region: no-drag;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
 }
 
-.tab.active {
-  background-color: var(--color-surface);
-  color: var(--color-text);
-  font-weight: 600;
-  border-bottom-color: transparent;
+/* Tab 尾部按钮和文本可点击/不可拖动 */
+.note-tabs :deep(.n-tabs-nav__suffix) {
+  -webkit-app-region: no-drag;
+  margin-right: -4px;
 }
 
-.tab.new-tab {
-  font-size: 18px;
-  padding: 6px 12px;
-  color: var(--color-accent);
-  font-weight: 700;
-}
-
-.tab.new-tab:hover {
-  background-color: var(--color-accent);
-  color: #fff;
-  border-color: var(--color-accent);
-}
-
-/* + 按钮右侧可拖拽空白区域 */
-.drag-spacer {
+.note-tabs :deep(.n-tabs-pane-wrapper) {
   flex: 1;
-  -webkit-app-region: drag;
+  overflow: hidden;
+  padding-top: 8px;
 }
 
-.actions {
+.note-tabs :deep(.n-tab-pane) {
+  height: 100%;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
 }
 
-.save-status {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  min-width: 60px;
-  text-align: right;
-}
-
-.settings-btn {
-  background: transparent;
-  border: none;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 18px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+.editor-wrapper {
+  flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  padding: 4px 14px 14px 14px;
+  overflow: visible;
 }
 
-.settings-btn:hover {
-  background: var(--color-surface);
-  transform: scale(1.1);
-}
-
-/* 保存按钮样式已移除 */
-
-.editor-container {
+.empty-container {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--color-surface);
-  border-radius: 12px;
-  margin: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid var(--color-border);
-  position: relative;
 }
 
-/* 模式切换按钮样式已移除 */
-
-.no-drag { -webkit-app-region: no-drag; }
-
-/* 编辑器容器动画效果 */
-.editor-container {
-  transition: all 0.3s ease;
+.empty-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid v-bind('themeVars.dividerColor');
+  background-color: v-bind('themeVars.cardColor');
+  -webkit-app-region: drag;
 }
 
-.editor-container:hover {
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-  transform: translateY(-1px);
+.empty-toolbar :deep(.n-button) {
+  -webkit-app-region: no-drag;
 }
 
-/* 响应式设计优化 */
-@media (max-width: 1024px) {
-  .editor-container {
-    margin: 8px;
-    border-radius: 8px;
-  }
-  
-  .toolbar {
-    padding: 8px 12px;
-    gap: 8px;
-  }
-  
-  .tabs {
-    gap: 2px;
-  }
-  
-  .tab {
-    padding: 6px 12px;
-    font-size: 13px;
-  }
-  
-  .actions {
-    gap: 8px;
-  }
-}
-
-@media (max-width: 768px) {
-  .app-container {
-    --color-bg: #0f1115;
-    --color-surface: #12151c;
-    --color-surface-2: #161a22;
-    --color-border: #232938;
-    --color-text: #e5e7eb;
-    --color-text-muted: #9ca3af;
-    --color-accent: #818cf8;
-    --color-accent-hover: #6366f1;
-    --color-accent-press: #4f46e5;
-  }
-  
-  .toolbar {
-    flex-direction: column;
-    gap: 8px;
-    padding: 8px;
-  }
-  
-  .tabs {
-    order: 1;
-    width: 100%;
-    justify-content: flex-start;
-  }
-  
-  .actions {
-    order: 2;
-    width: 100%;
-    justify-content: space-between;
-  }
-  
-  .editor-container {
-    margin: 4px;
-    border-radius: 8px;
-  }
-  
-  /* 模式切换按钮样式已移除 */
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>
 

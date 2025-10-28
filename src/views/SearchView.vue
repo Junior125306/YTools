@@ -1,216 +1,251 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, type ComponentPublicInstance } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { getSearchDirectories } from '../utils/configStore';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { 
+  NCard, NInput, NList, NListItem, NEmpty, NSpace, NTag, NIcon, NText, useThemeVars
+} from 'naive-ui'
+import { SearchOutline, FolderOutline } from '@vicons/ionicons5'
+import { getSearchDirectories } from '../utils/configStore'
+import { useTheme } from '../composables/useTheme'
 
-const searchInput = ref<HTMLInputElement | null>(null);
-const query = ref('');
-const searchResults = ref<string[]>([]);
-const selectedIndex = ref(0);
-const currentWindow = getCurrentWindow();
-const isOpening = ref(false); // 防止回车重复触发打开
-const hasSearchDirectories = ref(true); // 是否配置了搜索目录
-const resultRefs = ref<HTMLElement[]>([]); // 存储结果项的引用
+const themeVars = useThemeVars()
+// 初始化主题并监听主题变更
+useTheme()
+
+const searchInput = ref<any>(null)
+const query = ref('')
+const searchResults = ref<string[]>([])
+const selectedIndex = ref(0)
+const currentWindow = getCurrentWindow()
+const isOpening = ref(false)
+const hasSearchDirectories = ref(true)
+const resultRefs = ref<HTMLElement[]>([])
 
 // 搜索函数
 async function performSearch(searchQuery: string) {
   try {
-    // 获取搜索目录列表
-    const directories = await getSearchDirectories();
+    const directories = await getSearchDirectories()
     
-    // 检查是否配置了搜索目录
     if (directories.length === 0) {
-      hasSearchDirectories.value = false;
-      searchResults.value = [];
-      resultRefs.value = []; // 清空引用
-      return;
+      hasSearchDirectories.value = false
+      searchResults.value = []
+      resultRefs.value = []
+      return
     }
     
-    hasSearchDirectories.value = true;
+    hasSearchDirectories.value = true
     
-    // 调用后端搜索，传递目录列表
     searchResults.value = await invoke<string[]>('search_workspaces', { 
       query: searchQuery || '',
       directories
-    });
-    selectedIndex.value = 0;
-    resultRefs.value = []; // 清空引用，等待新的结果渲染
+    })
+    selectedIndex.value = 0
+    resultRefs.value = []
   } catch (error) {
-    console.error('搜索失败:', error);
-    searchResults.value = [];
-    resultRefs.value = [];
+    console.error('搜索失败:', error)
+    searchResults.value = []
+    resultRefs.value = []
   }
 }
 
 // 打开文件夹
 async function openFolder(folderName: string) {
-  if (isOpening.value) return; // 防抖：已在打开中则忽略
-  isOpening.value = true;
+  if (isOpening.value) return
+  isOpening.value = true
   try {
-    // 先尝试隐藏窗口，提供更快的反馈（无权限时忽略错误）
-    await currentWindow.hide().catch(() => {});
-    
-    // 清空状态
-    query.value = '';
-    searchResults.value = [];
-    
-    // 然后打开文件夹（同时传 snake_case 与 camelCase 以兼容参数名解析）
-    await invoke('open_folder', { folder_name: folderName, folderName: folderName });
+    await currentWindow.hide().catch(() => {})
+    query.value = ''
+    searchResults.value = []
+    await invoke('open_folder', { folder_name: folderName, folderName: folderName })
   } catch (error) {
-    console.error('打开文件夹失败:', error);
-    // 即使出错也要尝试隐藏窗口（忽略错误）
-    await currentWindow.hide().catch(() => {});
+    console.error('打开文件夹失败:', error)
+    await currentWindow.hide().catch(() => {})
   }
   finally {
-    // 短暂延迟，避免同一次按键冒泡导致的双触发
     setTimeout(() => {
-      isOpening.value = false;
-    }, 50);
+      isOpening.value = false
+    }, 50)
   }
 }
 
 // 处理输入
 function handleInput() {
-  performSearch(query.value);
+  performSearch(query.value)
 }
 
 // 处理键盘事件
 async function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    await currentWindow.hide();
-    query.value = '';
-    searchResults.value = [];
+    e.preventDefault()
+    await currentWindow.hide()
+    query.value = ''
+    searchResults.value = []
   } else if (e.key === 'ArrowDown') {
-    e.preventDefault();
+    e.preventDefault()
     if (searchResults.value.length > 0) {
-      selectedIndex.value = (selectedIndex.value + 1) % searchResults.value.length;
-      await scrollToSelected();
+      selectedIndex.value = (selectedIndex.value + 1) % searchResults.value.length
+      await scrollToSelected()
     }
   } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
+    e.preventDefault()
     if (searchResults.value.length > 0) {
-      selectedIndex.value = (selectedIndex.value - 1 + searchResults.value.length) % searchResults.value.length;
-      await scrollToSelected();
+      selectedIndex.value = (selectedIndex.value - 1 + searchResults.value.length) % searchResults.value.length
+      await scrollToSelected()
     }
   } else if (e.key === 'Enter') {
-    e.preventDefault();
+    e.preventDefault()
     if (searchResults.value.length > 0 && searchResults.value[selectedIndex.value]) {
-      openFolder(searchResults.value[selectedIndex.value]);
+      await openFolder(searchResults.value[selectedIndex.value])
     }
   }
 }
 
 // 滚动到选中的项目
 async function scrollToSelected() {
-  await nextTick();
-  const selectedElement = resultRefs.value[selectedIndex.value];
+  await nextTick()
+  const selectedElement = resultRefs.value[selectedIndex.value]
   if (selectedElement) {
     selectedElement.scrollIntoView({
       behavior: 'smooth',
       block: 'nearest'
-    });
+    })
   }
 }
 
 // 选择项目
 function selectItem(index: number) {
-  selectedIndex.value = index;
+  selectedIndex.value = index
 }
 
 // 点击项目
-function clickItem(index: number) {
-  openFolder(searchResults.value[index]);
+async function clickItem(index: number) {
+  if (index >= 0 && index < searchResults.value.length) {
+    await openFolder(searchResults.value[index])
+  }
 }
 
 // 设置结果项的 ref
-function setResultRef(el: Element | ComponentPublicInstance | null, index: number) {
+function setResultRef(el: any, index: number) {
   if (el) {
-    resultRefs.value[index] = el as HTMLElement;
+    resultRefs.value[index] = el.$el || el
   }
 }
 
 // 点击背景关闭
 async function handleBackgroundClick(e: MouseEvent) {
   if ((e.target as HTMLElement).classList.contains('search-window')) {
-    await currentWindow.hide();
-    query.value = '';
-    searchResults.value = [];
+    await currentWindow.hide()
+    query.value = ''
+    searchResults.value = []
   }
 }
 
 // 初始化
 onMounted(async () => {
-  // 页面加载时初始化，显示所有文件夹
-  await performSearch('');
+  await performSearch('')
   
-  // 聚焦输入框
-  searchInput.value?.focus();
+  // 自动聚焦到搜索输入框
+  await nextTick()
+  if (searchInput.value) {
+    searchInput.value.focus()
+  }
   
-  // 全局监听键盘事件（确保 ESC/Enter 始终有效）
-  // 仅在捕获阶段监听一次，避免重复与冒泡触发两次
-  document.addEventListener('keydown', handleKeydown, { capture: true } as AddEventListenerOptions);
+  document.addEventListener('keydown', handleKeydown, { capture: true } as AddEventListenerOptions)
   
-  // 监听窗口显示事件
-  currentWindow.listen('tauri://focus', () => {
-    searchInput.value?.focus();
-    query.value = '';
-    performSearch('');
-  });
-});
+  currentWindow.listen('tauri://focus', async () => {
+    query.value = ''
+    await performSearch('')
+    // 窗口获得焦点时也自动聚焦输入框
+    await nextTick()
+    if (searchInput.value) {
+      searchInput.value.focus()
+    }
+  })
+})
 
-// 组件卸载时清理事件监听器
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown, { capture: true } as AddEventListenerOptions);
-});
+  document.removeEventListener('keydown', handleKeydown, { capture: true } as AddEventListenerOptions)
+})
 </script>
 
 <template>
   <div class="search-window" @click="handleBackgroundClick">
-    <div class="search-container">
-      <input
-        ref="searchInput"
-        v-model="query"
-        type="text"
-        class="search-input"
-        placeholder="搜索工作区文件夹..."
-        @input="handleInput"
-      />
+    <NCard 
+      class="search-container" 
+      :bordered="false"
+      :segmented="{ content: true, footer: true }"
+      content-style="padding: 0; display: flex; flex-direction: column; height: 100%;"
+    >
+      <template #header>
+        <NInput
+          ref="searchInput"
+          v-model:value="query"
+          placeholder="搜索工作区文件夹..."
+          size="large"
+          clearable
+          @input="handleInput"
+        >
+          <template #prefix>
+            <NIcon size="20"><SearchOutline /></NIcon>
+          </template>
+        </NInput>
+      </template>
       
       <div class="results-container">
-        <div v-if="!hasSearchDirectories" class="search-empty">
-          <div class="empty-icon">⚠️</div>
-          <div class="empty-title">未配置搜索目录</div>
-          <div class="empty-desc">请在设置中添加搜索目录后使用此功能</div>
-        </div>
+        <NEmpty v-if="!hasSearchDirectories" description="未配置搜索目录">
+          <template #icon>
+            <NIcon size="48"><FolderOutline /></NIcon>
+          </template>
+          <template #extra>
+            <NText depth="3" style="font-size: 13px">
+              请在设置中添加搜索目录后使用此功能
+            </NText>
+          </template>
+        </NEmpty>
         
-        <div v-else-if="searchResults.length === 0" class="search-empty">
-          未找到匹配的文件夹
-        </div>
+        <NEmpty v-else-if="searchResults.length === 0" description="未找到匹配的文件夹" />
         
-        <div v-else class="search-results">
-          <div
+        <NList v-else hoverable clickable style="height: 100%; overflow-y: auto;">
+          <NListItem
             v-for="(result, index) in searchResults"
             :key="result"
-            :ref="(el) => setResultRef(el, index)"
-            :class="['search-result-item', { selected: index === selectedIndex }]"
+            :ref="(el: any) => setResultRef(el, index)"
+            :class="{ 'selected-item': index === selectedIndex }"
             @click="clickItem(index)"
             @mouseenter="selectItem(index)"
           >
-            <div class="folder-icon">📁</div>
-            <div class="folder-name">{{ result }}</div>
-          </div>
-        </div>
+            <template #prefix>
+              <NIcon size="24" color="#818cf8"><FolderOutline /></NIcon>
+            </template>
+            <NText>{{ result }}</NText>
+          </NListItem>
+        </NList>
       </div>
       
-      <div class="search-footer">
-        <div class="shortcut-hint">
-          <span><kbd>↑↓</kbd> 导航</span>
-          <span><kbd>Enter</kbd> 打开</span>
-          <span><kbd>Esc</kbd> 关闭</span>
-        </div>
-      </div>
-    </div>
+      <template #footer>
+        <NSpace justify="center" size="large">
+          <NTag type="info" size="small" :bordered="false">
+            <template #icon>
+              <span style="font-family: monospace">↑↓</span>
+            </template>
+            导航
+          </NTag>
+          <NTag type="success" size="small" :bordered="false">
+            <template #icon>
+              <span style="font-family: monospace">Enter</span>
+            </template>
+            打开
+          </NTag>
+          <NTag type="warning" size="small" :bordered="false">
+            <template #icon>
+              <span style="font-family: monospace">Esc</span>
+            </template>
+            关闭
+          </NTag>
+        </NSpace>
+      </template>
+    </NCard>
   </div>
 </template>
 
@@ -222,57 +257,84 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  position: fixed;
-  top: 0;
-  left: 0;
   backdrop-filter: blur(10px);
+  background: transparent;
 }
 
 .search-container {
-  width: min(720px, 92vw);
-  height: min(70vh, 720px);
-  background: var(--color-surface);
-  border-radius: var(--radius-l);
-  box-shadow: var(--shadow-md);
+  width: min(600px, 85vw);
+  height: min(500px, 70vh);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.search-container :deep(.n-card__content) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.results-container {
+  flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+/* 选中项样式 - 去除圆角，填满整个区域 */
+.selected-item {
+  background-color: v-bind('themeVars.primaryColorSuppl + "30"') !important;
+  border-radius: 0 !important;
 }
 
-.search-input {
-  width: 100%;
-  padding: 16px 20px;
-  font-size: 16px;
-  border: none;
-  background: var(--color-surface);
-  color: var(--color-text);
-  outline: none;
-  border-bottom: 1px solid var(--color-border);
+/* 覆盖 NList 和 NListItem 的所有圆角 */
+.search-container :deep(.n-list) {
+  border-radius: 0 !important;
 }
 
-.search-input::placeholder {
-  color: var(--color-text-muted);
+.search-container :deep(.n-list-item) {
+  border-radius: 0 !important;
 }
 
-.results-container {
-  flex: 1;  /* 占据剩余空间 */
-  overflow-y: auto;
-  background: var(--color-surface);
+.search-container :deep(.n-list-item__main) {
+  border-radius: 0 !important;
 }
 
+.search-container :deep(.n-list-item:first-child),
+.search-container :deep(.n-list-item:last-child) {
+  border-radius: 0 !important;
+}
+
+/* 悬停样式也去除圆角 */
+.search-container :deep(.n-list-item:hover) {
+  border-radius: 0 !important;
+}
+
+/* 细滚动条样式 */
+.search-container :deep(.n-list)::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-container :deep(.n-list)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.search-container :deep(.n-list)::-webkit-scrollbar-thumb {
+  background: v-bind('themeVars.scrollbarColor');
+  border-radius: 3px;
+}
+
+.search-container :deep(.n-list)::-webkit-scrollbar-thumb:hover {
+  background: v-bind('themeVars.scrollbarColorHover');
+}
+
+/* 结果容器滚动条 */
 .results-container::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .results-container::-webkit-scrollbar-track {
@@ -280,123 +342,32 @@ onUnmounted(() => {
 }
 
 .results-container::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-text) 12%, transparent);
-  border-radius: 4px;
+  background: v-bind('themeVars.scrollbarColor');
+  border-radius: 3px;
 }
 
 .results-container::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--color-text) 20%, transparent);
-}
-
-.search-results {
-  display: flex;
-  flex-direction: column;
-}
-
-.search-result-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
-  cursor: pointer;
-  transition: background var(--tr-fast), color var(--tr-fast);
-  color: var(--color-text);
-}
-
-.search-result-item:hover {
-  background: var(--color-surface-2);
-}
-
-.search-result-item.selected {
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
-}
-
-.folder-icon {
-  font-size: 18px;
-  margin-right: 12px;
-}
-
-.folder-name {
-  font-size: 14px;
-  flex: 1;
-}
-
-.search-empty {
-  padding: 40px 24px;
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: 14px;
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.empty-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: 8px;
-}
-
-.empty-desc {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.search-footer {
-  padding: 12px 20px;
-  border-top: 1px solid var(--color-border);
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-}
-
-.shortcut-hint {
-  display: flex;
-  gap: 16px;
-}
-
-.shortcut-hint span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-kbd {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-family: monospace;
+  background: v-bind('themeVars.scrollbarColorHover');
 }
 </style>
 
 <style>
-/* 为搜索窗口设置透明背景 */
+/* 搜索窗口专用：强制透明背景 */
 body:has(.search-window) {
   background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
 }
 
 html:has(.search-window) {
   background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
 }
 
 #app:has(.search-window) {
   background: transparent !important;
-  border: none !important;
-  outline: none !important;
+}
+
+/* 搜索窗口的 app-wrapper 也要透明 */
+.app-wrapper:has(.search-window) {
+  background: transparent !important;
 }
 </style>
 

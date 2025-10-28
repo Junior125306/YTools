@@ -9,6 +9,7 @@ export interface AppConfig {
   searchDirectories: string[];
   defaultNotesLocation: string;
   notes: string[]; // 所有笔记的完整路径列表
+  theme: 'light' | 'dark' | 'system'; // 主题模式
 }
 
 // 默认配置
@@ -19,7 +20,8 @@ const DEFAULT_CONFIG: AppConfig = {
   autoStart: false,
   searchDirectories: [],
   defaultNotesLocation: '', // 将在初始化时设置为 .ytools 目录
-  notes: []
+  notes: [],
+  theme: 'system' // 默认跟随系统主题
 };
 
 // 创建 store 实例（使用 Store.load 加载）
@@ -109,15 +111,28 @@ export async function setFontSize(size: number): Promise<void> {
   // autoSave 模式下会自动保存
 }
 
-// 获取完整配置
+// 获取完整配置（并行读取优化）
 export async function getConfig(): Promise<AppConfig> {
-  const fontSize = await getFontSize();
-  const fontFamily = await getFontFamily();
-  const lineHeight = await getLineHeight();
-  const autoStart = await getAutoStart();
-  const searchDirectories = await getSearchDirectories();
-  const defaultNotesLocation = await getDefaultNotesLocation();
-  const notes = await getNotes();
+  // 并行读取所有配置项，显著提升加载速度
+  const [
+    fontSize,
+    fontFamily,
+    lineHeight,
+    autoStart,
+    searchDirectories,
+    defaultNotesLocation,
+    notes,
+    theme
+  ] = await Promise.all([
+    getFontSize(),
+    getFontFamily(),
+    getLineHeight(),
+    getAutoStart(),
+    getSearchDirectories(),
+    getDefaultNotesLocation(),
+    getNotes(),
+    getTheme()
+  ]);
   
   return {
     fontSize,
@@ -126,7 +141,8 @@ export async function getConfig(): Promise<AppConfig> {
     autoStart,
     searchDirectories,
     defaultNotesLocation,
-    notes
+    notes,
+    theme: theme as 'light' | 'dark' | 'system'
   };
 }
 
@@ -142,6 +158,7 @@ export async function resetConfig(): Promise<void> {
   await storeInstance.set('searchDirectories', DEFAULT_CONFIG.searchDirectories);
   await storeInstance.set('defaultNotesLocation', DEFAULT_CONFIG.defaultNotesLocation);
   await storeInstance.set('notes', DEFAULT_CONFIG.notes);
+  await storeInstance.set('theme', DEFAULT_CONFIG.theme);
   await storeInstance.set('_migrated', true); // 保持迁移标记
   await storeInstance.save();
 }
@@ -264,5 +281,18 @@ export async function removeNote(path: string): Promise<void> {
   const notes = await getNotes();
   const filtered = notes.filter(n => n !== path);
   await setNotes(filtered);
+}
+
+// 获取主题
+export async function getTheme(): Promise<string> {
+  const storeInstance = await getStore();
+  const theme = await storeInstance.get<string>('theme');
+  return theme ?? DEFAULT_CONFIG.theme;
+}
+
+// 设置主题
+export async function setTheme(theme: string): Promise<void> {
+  const storeInstance = await getStore();
+  await storeInstance.set('theme', theme);
 }
 
