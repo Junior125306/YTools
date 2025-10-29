@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { 
@@ -11,7 +11,10 @@ import { useTheme } from '../composables/useTheme'
 
 const themeVars = useThemeVars()
 // 初始化主题并监听主题变更
-useTheme()
+const { themeMode } = useTheme()
+
+// 检查是否是赛博朋克主题
+const isCyberpunk = computed(() => themeMode.value === 'cyberpunk')
 
 const searchInput = ref<any>(null)
 const query = ref('')
@@ -170,7 +173,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="search-window" @click="handleBackgroundClick">
+  <div class="search-window" :class="{ 'cyberpunk-mode': isCyberpunk }" @click="handleBackgroundClick">
     <NCard 
       class="search-container" 
       :bordered="false"
@@ -348,6 +351,65 @@ onUnmounted(() => {
 
 .results-container::-webkit-scrollbar-thumb:hover {
   background: v-bind('themeVars.scrollbarColorHover');
+}
+
+/* 赛博朋克模式滚动条霓虹效果 */
+.search-window.cyberpunk-mode .search-container :deep(.n-list)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, 
+    #5ccfe6 0%, 
+    #4fb3c9 50%, 
+    #5ccfe6 100%
+  );
+  border-radius: 3px;
+  box-shadow: 
+    0 0 8px rgba(92, 207, 230, 0.8),
+    0 0 16px rgba(92, 207, 230, 0.5);
+}
+
+.search-window.cyberpunk-mode .search-container :deep(.n-list)::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, 
+    #6fdbf0 0%, 
+    #5ccfe6 50%, 
+    #6fdbf0 100%
+  );
+  box-shadow: 
+    0 0 12px rgba(92, 207, 230, 1),
+    0 0 24px rgba(92, 207, 230, 0.8),
+    0 0 36px rgba(92, 207, 230, 0.5);
+}
+
+.search-window.cyberpunk-mode .search-container :deep(.n-list)::-webkit-scrollbar-track {
+  background: rgba(92, 207, 230, 0.05);
+  box-shadow: inset 0 0 6px rgba(92, 207, 230, 0.2);
+}
+
+.search-window.cyberpunk-mode .results-container::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, 
+    #5ccfe6 0%, 
+    #4fb3c9 50%, 
+    #5ccfe6 100%
+  );
+  border-radius: 3px;
+  box-shadow: 
+    0 0 8px rgba(92, 207, 230, 0.8),
+    0 0 16px rgba(92, 207, 230, 0.5);
+}
+
+.search-window.cyberpunk-mode .results-container::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, 
+    #6fdbf0 0%, 
+    #5ccfe6 50%, 
+    #6fdbf0 100%
+  );
+  box-shadow: 
+    0 0 12px rgba(92, 207, 230, 1),
+    0 0 24px rgba(92, 207, 230, 0.8),
+    0 0 36px rgba(92, 207, 230, 0.5);
+}
+
+.search-window.cyberpunk-mode .results-container::-webkit-scrollbar-track {
+  background: rgba(92, 207, 230, 0.05);
+  box-shadow: inset 0 0 6px rgba(92, 207, 230, 0.2);
 }
 </style>
 

@@ -9,7 +9,7 @@ export interface AppConfig {
   searchDirectories: string[];
   defaultNotesLocation: string;
   notes: string[]; // 所有笔记的完整路径列表
-  theme: 'light' | 'dark' | 'system'; // 主题模式
+  theme: 'light' | 'dark' | 'cyberpunk' | 'system'; // 主题模式
 }
 
 // 默认配置

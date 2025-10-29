@@ -16,6 +16,37 @@
 - 远程桌面快捷方式
 - 工单管理系统
 
+## [0.4.2] - 2025-10-29
+
+### Added (新增)
+
+- ✨ **赛博朋克主题（Cyberpunk Theme）**
+  - 新增 Cyberpunk 主题选项，灵感来自 Halcyon VSCode 主题
+  - 青色（Cyan）霓虹主色调，配合黄色（Yellow）和红色（Red）点缀
+  - 深邃暗色背景（#0f1419）增强霓虹对比效果
+  - 全局霓虹发光效果：按钮、输入框、滚动条、标签页等
+  - 统一的柔和浅灰白色文字（#d7dce2）
+  - 动态霓虹脉冲动画，营造赛博朋克氛围
+
+### Changed (变更)
+
+- ♻️ **主题选择器优化**
+  - 设置页面采用四宫格卡片式主题选择器
+  - 每个主题配有可视化预览效果（亮色、暗色、赛博朋克、跟随系统）
+  - 支持点击选择，激活时显示青色霓虹边框和勾选标记
+  - 优化设置窗口尺寸（310x650）以适配新的主题选择器
+- ♻️ **赛博朋克模式下的视觉增强**
+  - HomeView: Tab 标签霓虹发光、设置/导入按钮特殊配色
+  - SearchView: 青色霓虹滚动条，渐变发光效果
+  - SettingsView: 分隔线霓虹脉冲、按钮发光强化
+
+### Technical (技术)
+
+- 扩展 ThemeMode 类型支持 'cyberpunk' 选项
+- 新增 `cyberpunkThemeOverrides` 主题覆盖配置（180+ 行样式定义）
+- 添加 `isCyberpunk` 计算属性用于条件样式绑定
+- 新增多个赛博朋克专用 CSS 类和动画关键帧
+
 ## [0.4.1] - 2025-10-29
 
 ### Fixed (修复)
@@ -217,7 +248,8 @@
 
 ---
 
-[Unreleased]: https://github.com/yourusername/ytools/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/yourusername/ytools/releases/tag/v0.4.2
 [0.4.1]: https://github.com/yourusername/ytools/releases/tag/v0.4.1
 [0.4.0]: https://github.com/yourusername/ytools/releases/tag/v0.4.0
 [0.3.0]: https://github.com/yourusername/ytools/releases/tag/v0.3.0

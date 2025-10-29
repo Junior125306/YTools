@@ -10,10 +10,14 @@ import { initConfig, getFontSize, setFontSize, getFontFamily, getLineHeight, get
 import { showError, showInfo, showWarning, showConfirm } from '../utils/dialogHelper';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useTheme } from '../composables/useTheme';
+import { computed } from 'vue';
 
 const themeVars = useThemeVars();
 // 初始化主题并监听主题变更
-useTheme();
+const { themeMode } = useTheme();
+
+// 检查是否是赛博朋克主题
+const isCyberpunk = computed(() => themeMode.value === 'cyberpunk');
 
 // 笔记列表和当前选中的笔记（完整路径）
 const notes = ref<string[]>([]);
@@ -338,10 +342,10 @@ async function openSettings() {
     const newWindow = new WebviewWindow('settings', {
       url: '/#/settings',
       title: '设置',
-      width: 400,
-      height: 580,
-      minWidth: 350,
-      minHeight: 500,
+      width: 310,
+      height: 650,
+      minWidth: 280,
+      minHeight: 600,
       resizable: true,
       center: true,
       skipTaskbar: true,
@@ -417,7 +421,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app-container">
+  <div class="app-container" :class="{ 'cyberpunk-mode': isCyberpunk }">
     <!-- Tab 标签页 -->
     <NTabs
       v-if="notes.length > 0"
@@ -429,6 +433,7 @@ onUnmounted(() => {
       @add="createNote"
       @update:value="switchNote"
       class="note-tabs"
+      :class="{ 'cyberpunk-tabs': isCyberpunk }"
     >
       <NTabPane
         v-for="notePath in notes"
@@ -452,13 +457,25 @@ onUnmounted(() => {
       
       <!-- Tab 尾部插槽：其他操作按钮 -->
       <template #suffix>
-        <NButton quaternary size="small" @click="importNote" style="margin-left: 16px">
+        <NButton 
+          quaternary 
+          size="small" 
+          @click="importNote" 
+          style="margin-left: 16px"
+          :class="{ 'cyberpunk-import-btn': isCyberpunk }"
+        >
           <template #icon>
             <NIcon><FolderOpenOutline /></NIcon>
           </template>
           导入
         </NButton>
-        <NButton quaternary circle size="small" @click="openSettings" style="margin-right: 4px; margin-left: 8px">
+        <NButton 
+          text 
+          size="small" 
+          @click="openSettings" 
+          style="margin-right: 4px; margin-left: 8px"
+          :class="{ 'cyberpunk-settings-btn': isCyberpunk }"
+        >
           <template #icon>
             <NIcon size="18"><SettingsOutline /></NIcon>
           </template>
@@ -471,7 +488,13 @@ onUnmounted(() => {
       <!-- 顶部工具栏 -->
       <div class="empty-toolbar">
         <NSpace align="center">
-          <NButton text size="small" @click="openSettings" title="设置">
+          <NButton 
+            text 
+            size="small" 
+            @click="openSettings" 
+            title="设置"
+            :class="{ 'cyberpunk-settings-btn': isCyberpunk }"
+          >
             <template #icon>
               <NIcon size="18"><SettingsOutline /></NIcon>
             </template>
@@ -490,7 +513,10 @@ onUnmounted(() => {
               </template>
               新建笔记
             </NButton>
-            <NButton @click="importNote">
+            <NButton 
+              @click="importNote"
+              :class="{ 'cyberpunk-import-btn': isCyberpunk }"
+            >
               <template #icon>
                 <NIcon><FolderOpenOutline /></NIcon>
               </template>
@@ -597,6 +623,96 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ==================== 赛博朋克霓虹效果 ==================== */
+
+/* Tab 标签霓虹效果 */
+:deep(.cyberpunk-tabs) {
+  /* 激活的 Tab */
+  .n-tabs-tab.n-tabs-tab--active {
+    border-color: #5ccfe6 !important;
+    box-shadow: 
+      0 0 8px rgba(92, 207, 230, 0.5),
+      0 0 16px rgba(92, 207, 230, 0.3),
+      0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .n-tabs-tab.n-tabs-tab--active .n-tabs-tab__label {
+    color: #5ccfe6;
+    text-shadow: 0 0 8px rgba(92, 207, 230, 0.6);
+  }
+  
+  /* 悬停的 Tab */
+  .n-tabs-tab:hover {
+    border-color: rgba(92, 207, 230, 0.5) !important;
+    box-shadow: 
+      0 0 6px rgba(92, 207, 230, 0.3),
+      0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+  
+  /* Tab 边框整体发光 */
+  .n-tabs-nav {
+    border-bottom: 2px solid rgba(92, 207, 230, 0.3);
+    box-shadow: 0 2px 12px rgba(92, 207, 230, 0.15);
+  }
+  
+  /* 新增按钮霓虹效果 */
+  .n-tabs-tab--addable {
+    border-color: rgba(92, 207, 230, 0.4) !important;
+  }
+  
+  .n-tabs-tab--addable:hover {
+    border-color: rgba(92, 207, 230, 0.7) !important;
+    box-shadow: 
+      0 0 8px rgba(92, 207, 230, 0.4),
+      0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+  
+  .n-tabs-tab--addable .n-icon {
+    color: #5ccfe6;
+  }
+}
+
+/* 设置按钮霓虹效果 */
+:deep(.cyberpunk-settings-btn) {
+  transition: all 0.3s ease;
+}
+
+:deep(.cyberpunk-settings-btn:hover) {
+  background: rgba(92, 207, 230, 0.08) !important;
+  transform: translateY(-1px);
+}
+
+:deep(.cyberpunk-settings-btn) .n-icon {
+  color: #5ccfe6;
+  filter: drop-shadow(0 0 4px rgba(92, 207, 230, 0.6));
+}
+
+:deep(.cyberpunk-settings-btn:hover) .n-icon {
+  filter: drop-shadow(0 0 8px rgba(92, 207, 230, 0.8));
+}
+
+/* 导入按钮霓虹效果（黄色 - 契合Windows文件夹） */
+:deep(.cyberpunk-import-btn) {
+  color: #ffcc66 !important;
+  transition: all 0.3s ease;
+}
+
+:deep(.cyberpunk-import-btn:hover) {
+  background: rgba(255, 204, 102, 0.1) !important;
+  box-shadow: 
+    0 0 8px rgba(255, 204, 102, 0.4),
+    0 0 16px rgba(255, 204, 102, 0.2);
+}
+
+:deep(.cyberpunk-import-btn) .n-icon {
+  color: #ffcc66;
+  filter: drop-shadow(0 0 3px rgba(255, 204, 102, 0.5));
+}
+
+:deep(.cyberpunk-import-btn:hover) .n-icon {
+  filter: drop-shadow(0 0 6px rgba(255, 204, 102, 0.7));
 }
 </style>
 
