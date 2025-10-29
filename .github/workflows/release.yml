@@ -57,18 +57,18 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          
+
           # 从 CHANGELOG.md 提取当前版本的发布说明
           NOTES=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | \
             sed '/## \['"$VERSION"'\]/d' | \
             sed '/## \[/,$d' | \
             sed '/^$/N;/^\n$/D')
-          
+
           # 如果提取失败，使用默认说明
           if [ -z "$NOTES" ]; then
             NOTES="Release $VERSION"
           fi
-          
+
           # 保存到文件用于 tauri-action
           echo "$NOTES" > release_notes.md
 
