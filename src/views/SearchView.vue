@@ -16,6 +16,12 @@ const { themeMode } = useTheme()
 // 检查是否是赛博朋克主题
 const isCyberpunk = computed(() => themeMode.value === 'cyberpunk')
 
+// ==== 主题颜色变量 ====
+const primaryColor = computed(() => '#5ccfe6')
+const primaryColorLight = computed(() => '#6fdbf0')
+const primaryColorDark = computed(() => '#4fb3c9')
+const primaryColorAlpha = (alpha: number) => `rgba(92, 207, 230, ${alpha})`
+
 const searchInput = ref<any>(null)
 const query = ref('')
 const searchResults = ref<string[]>([])
@@ -356,60 +362,60 @@ onUnmounted(() => {
 /* 赛博朋克模式滚动条霓虹效果 */
 .search-window.cyberpunk-mode .search-container :deep(.n-list)::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, 
-    #5ccfe6 0%, 
-    #4fb3c9 50%, 
-    #5ccfe6 100%
+    v-bind('primaryColor') 0%, 
+    v-bind('primaryColorDark') 50%, 
+    v-bind('primaryColor') 100%
   );
   border-radius: 3px;
   box-shadow: 
-    0 0 8px rgba(92, 207, 230, 0.8),
-    0 0 16px rgba(92, 207, 230, 0.5);
+    0 0 8px v-bind('primaryColorAlpha(0.8)'),
+    0 0 16px v-bind('primaryColorAlpha(0.5)');
 }
 
 .search-window.cyberpunk-mode .search-container :deep(.n-list)::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, 
-    #6fdbf0 0%, 
-    #5ccfe6 50%, 
-    #6fdbf0 100%
+    v-bind('primaryColorLight') 0%, 
+    v-bind('primaryColor') 50%, 
+    v-bind('primaryColorLight') 100%
   );
   box-shadow: 
-    0 0 12px rgba(92, 207, 230, 1),
-    0 0 24px rgba(92, 207, 230, 0.8),
-    0 0 36px rgba(92, 207, 230, 0.5);
+    0 0 12px v-bind('primaryColorAlpha(1)'),
+    0 0 24px v-bind('primaryColorAlpha(0.8)'),
+    0 0 36px v-bind('primaryColorAlpha(0.5)');
 }
 
 .search-window.cyberpunk-mode .search-container :deep(.n-list)::-webkit-scrollbar-track {
-  background: rgba(92, 207, 230, 0.05);
-  box-shadow: inset 0 0 6px rgba(92, 207, 230, 0.2);
+  background: v-bind('primaryColorAlpha(0.05)');
+  box-shadow: inset 0 0 6px v-bind('primaryColorAlpha(0.2)');
 }
 
 .search-window.cyberpunk-mode .results-container::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, 
-    #5ccfe6 0%, 
-    #4fb3c9 50%, 
-    #5ccfe6 100%
+    v-bind('primaryColor') 0%, 
+    v-bind('primaryColorDark') 50%, 
+    v-bind('primaryColor') 100%
   );
   border-radius: 3px;
   box-shadow: 
-    0 0 8px rgba(92, 207, 230, 0.8),
-    0 0 16px rgba(92, 207, 230, 0.5);
+    0 0 8px v-bind('primaryColorAlpha(0.8)'),
+    0 0 16px v-bind('primaryColorAlpha(0.5)');
 }
 
 .search-window.cyberpunk-mode .results-container::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, 
-    #6fdbf0 0%, 
-    #5ccfe6 50%, 
-    #6fdbf0 100%
+    v-bind('primaryColorLight') 0%, 
+    v-bind('primaryColor') 50%, 
+    v-bind('primaryColorLight') 100%
   );
   box-shadow: 
-    0 0 12px rgba(92, 207, 230, 1),
-    0 0 24px rgba(92, 207, 230, 0.8),
-    0 0 36px rgba(92, 207, 230, 0.5);
+    0 0 12px v-bind('primaryColorAlpha(1)'),
+    0 0 24px v-bind('primaryColorAlpha(0.8)'),
+    0 0 36px v-bind('primaryColorAlpha(0.5)');
 }
 
 .search-window.cyberpunk-mode .results-container::-webkit-scrollbar-track {
-  background: rgba(92, 207, 230, 0.05);
-  box-shadow: inset 0 0 6px rgba(92, 207, 230, 0.2);
+  background: v-bind('primaryColorAlpha(0.05)');
+  box-shadow: inset 0 0 6px v-bind('primaryColorAlpha(0.2)');
 }
 </style>
 

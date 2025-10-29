@@ -15,7 +15,7 @@ const isThemeLoaded = ref(false)
 if (typeof window !== 'undefined') {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   systemPrefersDark.value = mediaQuery.matches
-  
+
   mediaQuery.addEventListener('change', (e) => {
     systemPrefersDark.value = e.matches
   })
@@ -26,7 +26,7 @@ const effectiveTheme = computed<GlobalTheme | null>(() => {
   if (themeMode.value === 'cyberpunk') {
     return darkTheme // cyberpunk 基于 darkTheme
   }
-  const isDark = themeMode.value === 'dark' || 
+  const isDark = themeMode.value === 'dark' ||
     (themeMode.value === 'system' && systemPrefersDark.value)
   return isDark ? darkTheme : null // null = light theme
 })
@@ -73,27 +73,27 @@ const cyberpunkThemeOverrides: GlobalThemeOverrides = {
     primaryColorHover: '#6fdbf0',
     primaryColorPressed: '#4fb3c9',
     primaryColorSuppl: '#7ee3f5',
-    
+
     // 信息色 - 青色（霓虹青）
     infoColor: '#5ccfe6',
     infoColorHover: '#6fdbf0',
     infoColorPressed: '#3ab8d9',
-    
+
     // 成功色 - 绿色（霓虹绿）
     successColor: '#bae67e',
     successColorHover: '#c8f090',
     successColorPressed: '#a8d46b',
-    
+
     // 警告色 - 金色（霓虹黄）
     warningColor: '#ffcc66',
     warningColorHover: '#ffd580',
     warningColorPressed: '#ffae57',
-    
+
     // 错误色 - 红色（霓虹红）
     errorColor: '#ef6b73',
     errorColorHover: '#f58289',
     errorColorPressed: '#e35961',
-    
+
     // 背景色系 - 更深的暗色增强对比
     bodyColor: '#0f1419',        // 更深的背景
     cardColor: '#171c28',        // 深蓝紫
@@ -103,11 +103,11 @@ const cyberpunkThemeOverrides: GlobalThemeOverrides = {
     tableHeaderColor: '#242b3d',
     inputColor: '#1d2433',       // 更深的输入框背景
     codeColor: '#171c28',
-    
+
     // 边框和分隔符 - 使用青色霓虹
     borderColor: 'rgba(92, 207, 230, 0.2)',      // 青色半透明边框
     dividerColor: 'rgba(92, 207, 230, 0.15)',    // 青色半透明分隔线
-    
+
     // 文本色系 - 统一使用柔和的浅灰白色
     textColorBase: '#d7dce2',    // 柔和的浅灰白
     textColor1: '#d7dce2',       // 主要文字 - 浅灰白
@@ -115,25 +115,25 @@ const cyberpunkThemeOverrides: GlobalThemeOverrides = {
     textColor3: '#a2aabc',       // 三级文字 - 更暗的灰色
     textColorDisabled: '#6679a4',
     placeholderColor: '#8695b7',
-    
+
     // 悬停和高亮 - 霓虹青色
     hoverColor: 'rgba(92, 207, 230, 0.12)',     // 青色半透明悬停
     pressedColor: 'rgba(92, 207, 230, 0.2)',
     opacityDisabled: '0.4',
-    
+
     // 圆角
     borderRadius: '8px',
     borderRadiusSmall: '6px',
-    
+
     // 阴影 - 强化霓虹发光效果（青色+紫色混合）
     boxShadow1: '0 2px 12px rgba(92, 207, 230, 0.15), 0 1px 4px rgba(195, 166, 255, 0.1)',
     boxShadow2: '0 4px 20px rgba(92, 207, 230, 0.2), 0 2px 8px rgba(195, 166, 255, 0.15)',
     boxShadow3: '0 8px 40px rgba(92, 207, 230, 0.25), 0 4px 16px rgba(195, 166, 255, 0.2)',
-    
+
     // 滚动条 - 青色霓虹
     scrollbarColor: 'rgba(92, 207, 230, 0.5)',
     scrollbarColorHover: 'rgba(92, 207, 230, 0.8)',
-    
+
     // 字体
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif"
   },
@@ -153,7 +153,7 @@ const cyberpunkThemeOverrides: GlobalThemeOverrides = {
     textColorFocusPrimary: '#0f1419',
     // 青色霓虹发光效果
     boxShadowFocus: '0 0 0 3px rgba(92, 207, 230, 0.3), 0 0 20px rgba(92, 207, 230, 0.6)',
-    
+
     // 次要按钮 - 透明背景 + 青色边框
     color: 'rgba(92, 207, 230, 0.08)',
     colorHover: 'rgba(92, 207, 230, 0.15)',
@@ -164,7 +164,7 @@ const cyberpunkThemeOverrides: GlobalThemeOverrides = {
     border: '1px solid rgba(92, 207, 230, 0.4)',
     borderHover: '1px solid rgba(92, 207, 230, 0.6)',
     borderPressed: '1px solid rgba(92, 207, 230, 0.8)',
-    
+
     // 危险按钮（删除/重置） - 提高红色对比度
     colorError: '#ff6b73',
     colorHoverError: '#ff8a91',
@@ -221,7 +221,7 @@ const cyberpunkThemeOverrides: GlobalThemeOverrides = {
     buttonBorderColorActive: '#5ccfe6',
     boxShadowFocus: '0 0 0 3px rgba(92, 207, 230, 0.25), 0 0 12px rgba(92, 207, 230, 0.4)',
     dotColorActive: '#ffcc66',                  // 圆点使用黄色
-    
+
     // 未激活状态
     color: 'rgba(92, 207, 230, 0.1)',
     colorHover: 'rgba(92, 207, 230, 0.15)',
@@ -262,7 +262,7 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
   if (themeMode.value === 'cyberpunk') {
     return cyberpunkThemeOverrides
   }
-  const isDark = themeMode.value === 'dark' || 
+  const isDark = themeMode.value === 'dark' ||
     (themeMode.value === 'system' && systemPrefersDark.value)
   return isDark ? darkThemeOverrides : lightThemeOverrides
 })
@@ -327,12 +327,12 @@ export function useTheme() {
   // 修改主题（会通知所有窗口）
   const changeTheme = async (mode: ThemeMode) => {
     themeMode.value = mode
-    
+
     // 广播主题变更事件到所有窗口
     try {
       const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
       const allWindows = await WebviewWindow.getAll()
-      
+
       for (const win of allWindows) {
         try {
           await win.emit('theme-changed', mode)
@@ -350,9 +350,9 @@ export function useTheme() {
     naiveTheme: effectiveTheme,
     themeOverrides,
     changeTheme,
-    isDark: computed(() => 
-      themeMode.value === 'dark' || 
-      themeMode.value === 'cyberpunk' || 
+    isDark: computed(() =>
+      themeMode.value === 'dark' ||
+      themeMode.value === 'cyberpunk' ||
       (themeMode.value === 'system' && systemPrefersDark.value)
     ),
     isThemeLoaded

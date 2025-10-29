@@ -1,13 +1,16 @@
+use pinyin::ToPinyinMulti;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent, Emitter,
+    Emitter, Manager, WindowEvent,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-use pinyin::ToPinyinMulti;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -38,7 +41,7 @@ fn open_directory(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -46,7 +49,7 @@ fn open_directory(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
@@ -54,7 +57,7 @@ fn open_directory(path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("打开目录失败: {}", e))?;
     }
-    
+
     Ok(())
 }
 
@@ -112,7 +115,7 @@ fn normalize(input: &str) -> String {
 // 为了处理多音字，返回多个可能的拼音组合
 fn to_pinyin_full_multi(text: &str) -> Vec<String> {
     let mut current_results = vec![String::new()];
-    
+
     for c in text.chars() {
         if c.is_ascii_alphabetic() {
             // ASCII 字母保留（转小写）
@@ -142,8 +145,9 @@ fn to_pinyin_full_multi(text: &str) -> Vec<String> {
             }
         }
     }
-    
-    current_results.into_iter()
+
+    current_results
+        .into_iter()
         .map(|s| s.to_lowercase())
         .collect()
 }
@@ -152,7 +156,7 @@ fn to_pinyin_full_multi(text: &str) -> Vec<String> {
 // 为了处理多音字，返回多个可能的首字母组合
 fn to_pinyin_initials_multi(text: &str) -> Vec<String> {
     let mut current_results = vec![String::new()];
-    
+
     for c in text.chars() {
         if c.is_ascii_alphabetic() {
             // ASCII 字母保留（转小写）
@@ -182,8 +186,9 @@ fn to_pinyin_initials_multi(text: &str) -> Vec<String> {
             }
         }
     }
-    
-    current_results.into_iter()
+
+    current_results
+        .into_iter()
         .map(|s| s.to_lowercase())
         .collect()
 }
@@ -282,7 +287,7 @@ fn search_workspaces(query: String, directories: Vec<String>) -> Result<Vec<Stri
     // 遍历所有配置的搜索目录
     for workspace_dir_str in directories {
         let workspace_dir = PathBuf::from(&workspace_dir_str);
-        
+
         if !workspace_dir.exists() {
             continue;
         }
@@ -294,15 +299,17 @@ fn search_workspaces(query: String, directories: Vec<String>) -> Result<Vec<Stri
                         if let Ok(dir_name) = entry.file_name().into_string() {
                             let name_lower = dir_name.to_lowercase();
                             let name_norm = normalize(&name_lower);
-                            
+
                             // 生成拼音表示（多音字版本）
                             let name_pinyin_full_multi = to_pinyin_full_multi(&dir_name);
                             let name_pinyin_initials_multi = to_pinyin_initials_multi(&dir_name);
 
                             // 检查是否有任何拼音版本匹配
-                            let pinyin_full_match = name_pinyin_full_multi.iter()
+                            let pinyin_full_match = name_pinyin_full_multi
+                                .iter()
                                 .any(|py| py.contains(&query_lower));
-                            let pinyin_initials_match = name_pinyin_initials_multi.iter()
+                            let pinyin_initials_match = name_pinyin_initials_multi
+                                .iter()
                                 .any(|py| py.contains(&query_lower));
 
                             // 记录全量目录，用于回退模糊匹配
@@ -313,7 +320,8 @@ fn search_workspaces(query: String, directories: Vec<String>) -> Result<Vec<Stri
                                 || name_lower.contains(&query_lower)
                                 || (!query_norm.is_empty() && name_norm.contains(&query_norm))
                                 || pinyin_full_match // 拼音全拼匹配（多音字）
-                                || pinyin_initials_match // 拼音首字母匹配（多音字）
+                                || pinyin_initials_match
+                            // 拼音首字母匹配（多音字）
                             {
                                 results.push(dir_name);
                             }
@@ -343,7 +351,7 @@ fn search_workspaces(query: String, directories: Vec<String>) -> Result<Vec<Stri
         let lcs_sub = longest_common_substring_len(&name_norm, &query_norm);
         let lcs_seq = longest_common_subsequence_len(&name_norm, &query_norm);
         let edit = levenshtein_distance(&name_norm, &query_norm);
-        
+
         // 计算所有拼音全拼的最佳匹配得分
         let mut best_pinyin_lcs_sub = 0;
         let mut best_pinyin_lcs_seq = 0;
@@ -352,12 +360,12 @@ fn search_workspaces(query: String, directories: Vec<String>) -> Result<Vec<Stri
             let lcs_sub = longest_common_substring_len(pinyin, &query_lower);
             let lcs_seq = longest_common_subsequence_len(pinyin, &query_lower);
             let edit = levenshtein_distance(pinyin, &query_lower);
-            
+
             best_pinyin_lcs_sub = best_pinyin_lcs_sub.max(lcs_sub);
             best_pinyin_lcs_seq = best_pinyin_lcs_seq.max(lcs_seq);
             best_pinyin_edit = best_pinyin_edit.min(edit);
         }
-        
+
         // 计算所有拼音首字母的最佳匹配得分
         let mut best_initials_lcs_sub = 0;
         let mut best_initials_lcs_seq = 0;
@@ -366,7 +374,7 @@ fn search_workspaces(query: String, directories: Vec<String>) -> Result<Vec<Stri
             let lcs_sub = longest_common_substring_len(initials, &query_lower);
             let lcs_seq = longest_common_subsequence_len(initials, &query_lower);
             let edit = levenshtein_distance(initials, &query_lower);
-            
+
             best_initials_lcs_sub = best_initials_lcs_sub.max(lcs_sub);
             best_initials_lcs_seq = best_initials_lcs_seq.max(lcs_seq);
             best_initials_edit = best_initials_edit.min(edit);
@@ -424,12 +432,13 @@ fn open_folder(folder_name: String) -> Result<(), String> {
 #[tauri::command]
 async fn import_note(app: tauri::AppHandle) -> Result<String, String> {
     use tauri_plugin_dialog::DialogExt;
-    
-    let file_path = app.dialog()
+
+    let file_path = app
+        .dialog()
         .file()
         .add_filter("文本文件", &["md", "txt"])
         .blocking_pick_file();
-    
+
     match file_path {
         Some(path) => {
             if let Some(path_ref) = path.as_path() {
@@ -438,8 +447,8 @@ async fn import_note(app: tauri::AppHandle) -> Result<String, String> {
             } else {
                 Ok(String::new())
             }
-        },
-        None => Ok(String::new()) // 用户取消选择
+        }
+        None => Ok(String::new()), // 用户取消选择
     }
 }
 
@@ -447,17 +456,17 @@ async fn import_note(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn create_note(name: String, base_dir: String) -> Result<String, String> {
     let base_path = PathBuf::from(&base_dir);
-    
+
     // 确保目录存在
     if !base_path.exists() {
         fs::create_dir_all(&base_path).map_err(|e| format!("创建目录失败: {}", e))?;
     }
-    
+
     let file_path = base_path.join(&name);
-    
+
     // 创建空文件
     fs::write(&file_path, "").map_err(|e| format!("创建文件失败: {}", e))?;
-    
+
     // 返回完整路径
     Ok(file_path.to_string_lossy().to_string())
 }
@@ -466,12 +475,140 @@ fn create_note(name: String, base_dir: String) -> Result<String, String> {
 #[tauri::command]
 fn delete_note_file(path: String) -> Result<(), String> {
     let file_path = PathBuf::from(&path);
-    
+
     if !file_path.exists() {
         return Err(format!("文件不存在: {}", path));
     }
-    
+
     fs::remove_file(&file_path).map_err(|e| format!("删除文件失败: {}", e))?;
+    Ok(())
+}
+
+// 解析快捷键字符串为 Shortcut 对象
+// 输入格式: "Ctrl+Alt+D", "Alt+Space" 等
+fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
+    let parts: Vec<&str> = shortcut_str.split('+').map(|s| s.trim()).collect();
+
+    if parts.is_empty() {
+        return Err("快捷键字符串不能为空".to_string());
+    }
+
+    let mut modifiers = Modifiers::empty();
+    let mut main_key: Option<Code> = None;
+
+    for part in parts {
+        match part {
+            "Ctrl" | "Control" => modifiers |= Modifiers::CONTROL,
+            "Alt" => modifiers |= Modifiers::ALT,
+            "Shift" => modifiers |= Modifiers::SHIFT,
+            "Meta" | "Cmd" | "Command" | "Super" => modifiers |= Modifiers::META,
+            // 字母键
+            "A" => main_key = Some(Code::KeyA),
+            "B" => main_key = Some(Code::KeyB),
+            "C" => main_key = Some(Code::KeyC),
+            "D" => main_key = Some(Code::KeyD),
+            "E" => main_key = Some(Code::KeyE),
+            "F" => main_key = Some(Code::KeyF),
+            "G" => main_key = Some(Code::KeyG),
+            "H" => main_key = Some(Code::KeyH),
+            "I" => main_key = Some(Code::KeyI),
+            "J" => main_key = Some(Code::KeyJ),
+            "K" => main_key = Some(Code::KeyK),
+            "L" => main_key = Some(Code::KeyL),
+            "M" => main_key = Some(Code::KeyM),
+            "N" => main_key = Some(Code::KeyN),
+            "O" => main_key = Some(Code::KeyO),
+            "P" => main_key = Some(Code::KeyP),
+            "Q" => main_key = Some(Code::KeyQ),
+            "R" => main_key = Some(Code::KeyR),
+            "S" => main_key = Some(Code::KeyS),
+            "T" => main_key = Some(Code::KeyT),
+            "U" => main_key = Some(Code::KeyU),
+            "V" => main_key = Some(Code::KeyV),
+            "W" => main_key = Some(Code::KeyW),
+            "X" => main_key = Some(Code::KeyX),
+            "Y" => main_key = Some(Code::KeyY),
+            "Z" => main_key = Some(Code::KeyZ),
+            // 数字键
+            "0" => main_key = Some(Code::Digit0),
+            "1" => main_key = Some(Code::Digit1),
+            "2" => main_key = Some(Code::Digit2),
+            "3" => main_key = Some(Code::Digit3),
+            "4" => main_key = Some(Code::Digit4),
+            "5" => main_key = Some(Code::Digit5),
+            "6" => main_key = Some(Code::Digit6),
+            "7" => main_key = Some(Code::Digit7),
+            "8" => main_key = Some(Code::Digit8),
+            "9" => main_key = Some(Code::Digit9),
+            // 特殊键
+            "Space" => main_key = Some(Code::Space),
+            "Enter" => main_key = Some(Code::Enter),
+            "Escape" | "Esc" => main_key = Some(Code::Escape),
+            "Tab" => main_key = Some(Code::Tab),
+            "Backspace" => main_key = Some(Code::Backspace),
+            "Delete" => main_key = Some(Code::Delete),
+            "Insert" => main_key = Some(Code::Insert),
+            "Home" => main_key = Some(Code::Home),
+            "End" => main_key = Some(Code::End),
+            "PageUp" => main_key = Some(Code::PageUp),
+            "PageDown" => main_key = Some(Code::PageDown),
+            "ArrowUp" => main_key = Some(Code::ArrowUp),
+            "ArrowDown" => main_key = Some(Code::ArrowDown),
+            "ArrowLeft" => main_key = Some(Code::ArrowLeft),
+            "ArrowRight" => main_key = Some(Code::ArrowRight),
+            // F1-F12
+            "F1" => main_key = Some(Code::F1),
+            "F2" => main_key = Some(Code::F2),
+            "F3" => main_key = Some(Code::F3),
+            "F4" => main_key = Some(Code::F4),
+            "F5" => main_key = Some(Code::F5),
+            "F6" => main_key = Some(Code::F6),
+            "F7" => main_key = Some(Code::F7),
+            "F8" => main_key = Some(Code::F8),
+            "F9" => main_key = Some(Code::F9),
+            "F10" => main_key = Some(Code::F10),
+            "F11" => main_key = Some(Code::F11),
+            "F12" => main_key = Some(Code::F12),
+            _ => return Err(format!("不支持的按键: {}", part)),
+        }
+    }
+
+    let code = main_key.ok_or("快捷键必须包含一个主键".to_string())?;
+
+    let modifiers_opt = if modifiers.is_empty() {
+        None
+    } else {
+        Some(modifiers)
+    };
+
+    Ok(Shortcut::new(modifiers_opt, code))
+}
+
+// 更新全局快捷键
+#[tauri::command]
+fn update_global_shortcuts(
+    app_handle: tauri::AppHandle,
+    show_main: String,
+    show_search: String,
+) -> Result<(), String> {
+    // 解析新的快捷键
+    let new_main_shortcut = parse_shortcut(&show_main)?;
+    let new_search_shortcut = parse_shortcut(&show_search)?;
+
+    // 注销所有现有快捷键（简化处理：注销所有，然后重新注册）
+    let _ = app_handle.global_shortcut().unregister_all();
+
+    // 注册新的快捷键
+    app_handle
+        .global_shortcut()
+        .register(new_main_shortcut.clone())
+        .map_err(|e| format!("注册主窗口快捷键失败: {}", e))?;
+
+    app_handle
+        .global_shortcut()
+        .register(new_search_shortcut.clone())
+        .map_err(|e| format!("注册搜索窗口快捷键失败: {}", e))?;
+
     Ok(())
 }
 
@@ -482,7 +619,10 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             greet,
             read_note,
@@ -493,7 +633,8 @@ pub fn run() {
             import_note,
             create_note,
             delete_note_file,
-            open_directory
+            open_directory,
+            update_global_shortcuts
         ])
         .setup(|app| {
             // 跟踪主窗口焦点状态（不再在失焦时自动隐藏）
@@ -512,7 +653,9 @@ pub fn run() {
             let settings = MenuItemBuilder::with_id("settings", "设置").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
-            let menu = MenuBuilder::new(app).items(&[&show_hide, &settings, &quit]).build()?;
+            let menu = MenuBuilder::new(app)
+                .items(&[&show_hide, &settings, &quit])
+                .build()?;
 
             // 创建系统托盘图标
             let _tray = TrayIconBuilder::new()
@@ -598,7 +741,8 @@ pub fn run() {
                                     // 更可靠的状态检查：同时检查可见性和是否最小化
                                     let is_visible = window.is_visible().unwrap_or(false);
                                     let is_minimized = window.is_minimized().unwrap_or(false);
-                                    let is_focused = main_focused_for_shortcut.load(Ordering::SeqCst);
+                                    let is_focused =
+                                        main_focused_for_shortcut.load(Ordering::SeqCst);
 
                                     if is_visible && !is_minimized {
                                         // 如果已获得焦点，则隐藏；否则将其聚焦到前台
@@ -646,7 +790,7 @@ pub fn run() {
                 WebviewWindowBuilder::new(app, "search", tauri::WebviewUrl::App("/".into()))
                     .initialization_script("window.location.hash = '#/search';")
             };
-            
+
             if let Ok(search_window) = search_window_result
                 .title("搜索工作区")
                 .inner_size(650.0, 550.0)

@@ -1,5 +1,11 @@
 import { Store } from '@tauri-apps/plugin-store';
 
+// 快捷键配置接口
+export interface ShortcutsConfig {
+  showMainWindow: string;    // 显示/隐藏主窗口
+  showSearchWindow: string;  // 显示/隐藏搜索窗口
+}
+
 // 配置接口
 export interface AppConfig {
   fontSize: number;
@@ -10,7 +16,14 @@ export interface AppConfig {
   defaultNotesLocation: string;
   notes: string[]; // 所有笔记的完整路径列表
   theme: 'light' | 'dark' | 'cyberpunk' | 'system'; // 主题模式
+  shortcuts: ShortcutsConfig; // 快捷键配置
 }
+
+// 默认快捷键配置
+const DEFAULT_SHORTCUTS: ShortcutsConfig = {
+  showMainWindow: 'Alt+Space',
+  showSearchWindow: 'Ctrl+Space'
+};
 
 // 默认配置
 const DEFAULT_CONFIG: AppConfig = {
@@ -21,7 +34,8 @@ const DEFAULT_CONFIG: AppConfig = {
   searchDirectories: [],
   defaultNotesLocation: '', // 将在初始化时设置为 .ytools 目录
   notes: [],
-  theme: 'system' // 默认跟随系统主题
+  theme: 'system', // 默认跟随系统主题
+  shortcuts: DEFAULT_SHORTCUTS
 };
 
 // 创建 store 实例（使用 Store.load 加载）
@@ -44,7 +58,7 @@ export async function initConfig(): Promise<void> {
     const storeInstance = await getStore();
     // 检查是否需要从旧配置迁移
     await migrateOldConfig();
-    
+
     // 如果 defaultNotesLocation 为空，则设置为 .ytools 目录
     const defaultLocation = await storeInstance.get('defaultNotesLocation');
     if (!defaultLocation) {
@@ -63,16 +77,16 @@ export async function initConfig(): Promise<void> {
 async function migrateOldConfig(): Promise<void> {
   try {
     const storeInstance = await getStore();
-    
+
     // 检查是否已迁移
     const migrated = await storeInstance.get<boolean>('_migrated');
     if (migrated) return;
 
     // 尝试读取旧的配置文件
     const { readTextFile, exists, BaseDirectory } = await import('@tauri-apps/plugin-fs');
-    
-    const oldConfigExists = await exists('.ytools/config.json', { 
-      baseDir: BaseDirectory.Home 
+
+    const oldConfigExists = await exists('.ytools/config.json', {
+      baseDir: BaseDirectory.Home
     });
 
     if (oldConfigExists) {
@@ -80,12 +94,12 @@ async function migrateOldConfig(): Promise<void> {
         baseDir: BaseDirectory.Home
       });
       const oldConfig = JSON.parse(oldConfigContent);
-      
+
       // 迁移字体大小
       if (oldConfig.font_size) {
         await storeInstance.set('fontSize', oldConfig.font_size);
       }
-      
+
       console.log('✓ Old config migrated successfully');
     }
 
@@ -122,7 +136,8 @@ export async function getConfig(): Promise<AppConfig> {
     searchDirectories,
     defaultNotesLocation,
     notes,
-    theme
+    theme,
+    shortcuts
   ] = await Promise.all([
     getFontSize(),
     getFontFamily(),
@@ -131,9 +146,10 @@ export async function getConfig(): Promise<AppConfig> {
     getSearchDirectories(),
     getDefaultNotesLocation(),
     getNotes(),
-    getTheme()
+    getTheme(),
+    getShortcuts()
   ]);
-  
+
   return {
     fontSize,
     fontFamily,
@@ -142,7 +158,8 @@ export async function getConfig(): Promise<AppConfig> {
     searchDirectories,
     defaultNotesLocation,
     notes,
-    theme: theme as 'light' | 'dark' | 'system'
+    theme: theme as 'light' | 'dark' | 'cyberpunk' | 'system',
+    shortcuts
   };
 }
 
@@ -159,6 +176,7 @@ export async function resetConfig(): Promise<void> {
   await storeInstance.set('defaultNotesLocation', DEFAULT_CONFIG.defaultNotesLocation);
   await storeInstance.set('notes', DEFAULT_CONFIG.notes);
   await storeInstance.set('theme', DEFAULT_CONFIG.theme);
+  await storeInstance.set('shortcuts', DEFAULT_CONFIG.shortcuts);
   await storeInstance.set('_migrated', true); // 保持迁移标记
   await storeInstance.save();
 }
@@ -295,4 +313,32 @@ export async function setTheme(theme: string): Promise<void> {
   const storeInstance = await getStore();
   await storeInstance.set('theme', theme);
 }
+
+// 获取快捷键配置
+export async function getShortcuts(): Promise<ShortcutsConfig> {
+  const storeInstance = await getStore();
+  const shortcuts = await storeInstance.get<ShortcutsConfig>('shortcuts');
+  return shortcuts ?? DEFAULT_SHORTCUTS;
+}
+
+// 设置快捷键配置
+export async function setShortcuts(shortcuts: ShortcutsConfig): Promise<void> {
+  const storeInstance = await getStore();
+  await storeInstance.set('shortcuts', shortcuts);
+}
+
+// 更新单个快捷键
+export async function updateShortcut(key: keyof ShortcutsConfig, value: string): Promise<void> {
+  const shortcuts = await getShortcuts();
+  shortcuts[key] = value;
+  await setShortcuts(shortcuts);
+}
+
+// 重置快捷键到默认值
+export async function resetShortcuts(): Promise<void> {
+  await setShortcuts(DEFAULT_SHORTCUTS);
+}
+
+// 导出默认快捷键配置（用于恢复默认）
+export { DEFAULT_SHORTCUTS };
 

@@ -19,6 +19,18 @@ const { themeMode } = useTheme();
 // 检查是否是赛博朋克主题
 const isCyberpunk = computed(() => themeMode.value === 'cyberpunk');
 
+// ==== 主题颜色变量 ====
+// 主色调（青色 - 赛博朋克固定使用青色）
+const primaryColor = computed(() => '#5ccfe6')
+const primaryColorLight = computed(() => '#6fdbf0')
+
+// 次要色（黄色 - 赛博朋克专用）
+const accentColor = computed(() => '#ffcc66')
+
+// 半透明颜色函数
+const primaryColorAlpha = (alpha: number) => `rgba(92, 207, 230, ${alpha})`
+const accentColorAlpha = (alpha: number) => `rgba(255, 204, 102, ${alpha})`
+
 // 笔记列表和当前选中的笔记（完整路径）
 const notes = ref<string[]>([]);
 const activeNote = ref<string>(''); // 当前激活笔记的完整路径
@@ -342,9 +354,9 @@ async function openSettings() {
     const newWindow = new WebviewWindow('settings', {
       url: '/#/settings',
       title: '设置',
-      width: 310,
+      width: 410,
       height: 650,
-      minWidth: 280,
+      minWidth: 380,
       minHeight: 600,
       resizable: true,
       center: true,
@@ -498,7 +510,6 @@ onUnmounted(() => {
             <template #icon>
               <NIcon size="18"><SettingsOutline /></NIcon>
             </template>
-            设置
           </NButton>
         </NSpace>
       </div>
@@ -507,7 +518,10 @@ onUnmounted(() => {
         <NSpace vertical align="center">
           <NText depth="3">暂无笔记</NText>
           <NSpace>
-            <NButton @click="createNote">
+            <NButton 
+              @click="createNote"
+              :class="{ 'cyberpunk-create-btn': isCyberpunk }"
+            >
               <template #icon>
                 <NIcon><AddOutline /></NIcon>
               </template>
@@ -558,6 +572,8 @@ onUnmounted(() => {
   -webkit-app-region: drag;
   padding: 8px 16px;
   background-color: v-bind('themeVars.cardColor');
+  /* 亮色模式下增强底部边框 */
+  border-bottom: 1px solid rgba(167, 139, 250, 0.25);
 }
 
 .note-tabs :deep(.n-tabs-tab) {
@@ -631,88 +647,113 @@ onUnmounted(() => {
 :deep(.cyberpunk-tabs) {
   /* 激活的 Tab */
   .n-tabs-tab.n-tabs-tab--active {
-    border-color: #5ccfe6 !important;
+    border-color: v-bind('primaryColor') !important;
     box-shadow: 
-      0 0 8px rgba(92, 207, 230, 0.5),
-      0 0 16px rgba(92, 207, 230, 0.3),
+      0 0 8px v-bind('primaryColorAlpha(0.5)'),
+      0 0 16px v-bind('primaryColorAlpha(0.3)'),
       0 2px 8px rgba(0, 0, 0, 0.3);
   }
   
   .n-tabs-tab.n-tabs-tab--active .n-tabs-tab__label {
-    color: #5ccfe6;
-    text-shadow: 0 0 8px rgba(92, 207, 230, 0.6);
+    color: v-bind('primaryColor');
+    text-shadow: 0 0 8px v-bind('primaryColorAlpha(0.6)');
   }
   
   /* 悬停的 Tab */
   .n-tabs-tab:hover {
-    border-color: rgba(92, 207, 230, 0.5) !important;
+    border-color: v-bind('primaryColorAlpha(0.5)') !important;
     box-shadow: 
-      0 0 6px rgba(92, 207, 230, 0.3),
+      0 0 6px v-bind('primaryColorAlpha(0.3)'),
       0 2px 6px rgba(0, 0, 0, 0.2);
   }
   
   /* Tab 边框整体发光 */
   .n-tabs-nav {
-    border-bottom: 2px solid rgba(92, 207, 230, 0.3);
-    box-shadow: 0 2px 12px rgba(92, 207, 230, 0.15);
+    border-bottom: 2px solid v-bind('primaryColorAlpha(0.3)');
+    box-shadow: 0 2px 12px v-bind('primaryColorAlpha(0.15)');
   }
   
   /* 新增按钮霓虹效果 */
   .n-tabs-tab--addable {
-    border-color: rgba(92, 207, 230, 0.4) !important;
+    border-color: v-bind('primaryColorAlpha(0.4)') !important;
   }
   
   .n-tabs-tab--addable:hover {
-    border-color: rgba(92, 207, 230, 0.7) !important;
+    border-color: v-bind('primaryColorAlpha(0.7)') !important;
     box-shadow: 
-      0 0 8px rgba(92, 207, 230, 0.4),
+      0 0 8px v-bind('primaryColorAlpha(0.4)'),
       0 2px 6px rgba(0, 0, 0, 0.2);
   }
   
   .n-tabs-tab--addable .n-icon {
-    color: #5ccfe6;
+    color: v-bind('primaryColor');
   }
 }
 
-/* 设置按钮霓虹效果 */
-:deep(.cyberpunk-settings-btn) {
+/* 设置按钮霓虹效果 - 仅图标变色，背景不变 */
+:deep(.cyberpunk-settings-btn) .n-icon {
+  color: v-bind('primaryColor');
+  filter: drop-shadow(0 0 4px v-bind('primaryColorAlpha(0.6)'));
   transition: all 0.3s ease;
 }
 
-:deep(.cyberpunk-settings-btn:hover) {
-  background: rgba(92, 207, 230, 0.08) !important;
-  transform: translateY(-1px);
-}
-
-:deep(.cyberpunk-settings-btn) .n-icon {
-  color: #5ccfe6;
-  filter: drop-shadow(0 0 4px rgba(92, 207, 230, 0.6));
-}
-
 :deep(.cyberpunk-settings-btn:hover) .n-icon {
-  filter: drop-shadow(0 0 8px rgba(92, 207, 230, 0.8));
+  color: v-bind('primaryColorLight');
+  filter: drop-shadow(0 0 8px v-bind('primaryColorAlpha(0.8)'))
+          drop-shadow(0 0 12px v-bind('primaryColorAlpha(0.5)'));
 }
 
 /* 导入按钮霓虹效果（黄色 - 契合Windows文件夹） */
 :deep(.cyberpunk-import-btn) {
-  color: #ffcc66 !important;
+  color: v-bind('accentColor') !important;
   transition: all 0.3s ease;
 }
 
 :deep(.cyberpunk-import-btn:hover) {
-  background: rgba(255, 204, 102, 0.1) !important;
+  background: v-bind('accentColorAlpha(0.1)') !important;
   box-shadow: 
-    0 0 8px rgba(255, 204, 102, 0.4),
-    0 0 16px rgba(255, 204, 102, 0.2);
+    0 0 8px v-bind('accentColorAlpha(0.4)'),
+    0 0 16px v-bind('accentColorAlpha(0.2)');
 }
 
 :deep(.cyberpunk-import-btn) .n-icon {
-  color: #ffcc66;
-  filter: drop-shadow(0 0 3px rgba(255, 204, 102, 0.5));
+  color: v-bind('accentColor');
+  filter: drop-shadow(0 0 3px v-bind('accentColorAlpha(0.5)'));
 }
 
 :deep(.cyberpunk-import-btn:hover) .n-icon {
-  filter: drop-shadow(0 0 6px rgba(255, 204, 102, 0.7));
+  filter: drop-shadow(0 0 6px v-bind('accentColorAlpha(0.7)'));
+}
+
+/* 新建笔记按钮霓虹效果（青色 - 赛博朋克主题色） */
+:deep(.cyberpunk-create-btn) {
+  color: v-bind('primaryColor') !important;
+  transition: all 0.3s ease;
+}
+
+:deep(.cyberpunk-create-btn:hover) {
+  background: v-bind('primaryColorAlpha(0.1)') !important;
+  box-shadow: 
+    0 0 8px v-bind('primaryColorAlpha(0.4)'),
+    0 0 16px v-bind('primaryColorAlpha(0.2)');
+}
+
+:deep(.cyberpunk-create-btn) .n-icon {
+  color: v-bind('primaryColor');
+  filter: drop-shadow(0 0 3px v-bind('primaryColorAlpha(0.5)'));
+}
+
+:deep(.cyberpunk-create-btn:hover) .n-icon {
+  filter: drop-shadow(0 0 6px v-bind('primaryColorAlpha(0.7)'));
+}
+
+:deep(.cyberpunk-create-btn) .n-button__content {
+  color: v-bind('primaryColor');
+  text-shadow: 0 0 4px v-bind('primaryColorAlpha(0.5)');
+}
+
+:deep(.cyberpunk-create-btn:hover) .n-button__content {
+  text-shadow: 0 0 6px v-bind('primaryColorAlpha(0.7)');
 }
 </style>
 

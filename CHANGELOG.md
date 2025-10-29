@@ -16,6 +16,16 @@
 - 远程桌面快捷方式
 - 工单管理系统
 
+## [0.5.0] - 2025-10-29
+
+### Added (新增)
+
+- ✨ **快捷键自定义**：可在设置中自定义主窗口和搜索窗口的快捷键，支持冲突检测和一键重置
+
+### Changed (变更)
+
+- ♻️ 设置窗口宽度扩展到 410px，优化布局和主题样式细节
+
 ## [0.4.2] - 2025-10-29
 
 ### Added (新增)
@@ -248,7 +258,8 @@
 
 ---
 
-[Unreleased]: https://github.com/yourusername/ytools/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/yourusername/ytools/releases/tag/v0.5.0
 [0.4.2]: https://github.com/yourusername/ytools/releases/tag/v0.4.2
 [0.4.1]: https://github.com/yourusername/ytools/releases/tag/v0.4.1
 [0.4.0]: https://github.com/yourusername/ytools/releases/tag/v0.4.0

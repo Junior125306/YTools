@@ -10,8 +10,9 @@ import {
   NSwitch, NInputNumber, NSelect, NList, NListItem,
   NButton, NSpace, NIcon, NText, NDivider, useThemeVars, useMessage
 } from 'naive-ui'
-import { AddOutline, TrashOutline, CloseOutline, SettingsOutline } from '@vicons/ionicons5'
+import { AddOutline, TrashOutline, CloseOutline, SettingsOutline, RefreshOutline } from '@vicons/ionicons5'
 import { useTheme } from '../composables/useTheme'
+import KeybindingInput from '../components/KeybindingInput.vue'
 
 const themeVars = useThemeVars()
 const message = useMessage()
@@ -26,7 +27,10 @@ import {
   setDefaultNotesLocation,
   setTheme,
   resetConfig,
-  type AppConfig
+  setShortcuts,
+  DEFAULT_SHORTCUTS,
+  type AppConfig,
+  type ShortcutsConfig
 } from '../utils/configStore'
 
 const currentWindow = getCurrentWindow()
@@ -34,6 +38,46 @@ const { changeTheme, themeMode } = useTheme()
 
 // 检查是否是赛博朋克主题
 const isCyberpunk = computed(() => themeMode.value === 'cyberpunk')
+
+// ==== 主题颜色变量 ====
+// 主色调（根据当前应用的主题）
+const primaryColor = computed(() => isCyberpunk.value ? '#5ccfe6' : '#a78bfa')
+const primaryColorLight = computed(() => isCyberpunk.value ? '#6fdbf0' : '#c4b5fd')
+const primaryColorDark = computed(() => isCyberpunk.value ? '#4fb3c9' : '#8b5cf6')
+
+// 固定颜色（用于主题卡片，不随当前主题变化）
+const purpleColor = '#a78bfa'
+const purpleColorAlpha = (alpha: number) => `rgba(167, 139, 250, ${alpha})`
+const cyanColor = '#5ccfe6'
+const cyanColorAlpha = (alpha: number) => `rgba(92, 207, 230, ${alpha})`
+
+// 次要色（黄色 - 仅赛博朋克）
+const accentColor = computed(() => '#ffcc66')
+
+// 半透明颜色（根据当前应用的主题）
+const primaryColorAlpha = (alpha: number) => {
+  if (isCyberpunk.value) {
+    return `rgba(92, 207, 230, ${alpha})`
+  }
+  return `rgba(167, 139, 250, ${alpha})`
+}
+
+// 黄色半透明（赛博朋克次要色）
+const accentColorAlpha = (alpha: number) => `rgba(255, 204, 102, ${alpha})`
+
+// 背景色
+const bgDark = computed(() => '#0f1419')
+
+// 计算刷新按钮的颜色（根据主题）
+const resetButtonColor = computed(() => {
+  if (themeMode.value === 'cyberpunk') {
+    return primaryColor.value
+  } else if (themeMode.value === 'dark' || (themeMode.value === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    return primaryColor.value
+  } else {
+    return primaryColorDark.value
+  }
+})
 
 const localConfig = ref<AppConfig>({
   fontSize: 16,
@@ -43,7 +87,11 @@ const localConfig = ref<AppConfig>({
   searchDirectories: [],
   defaultNotesLocation: '',
   notes: [],
-  theme: 'system'
+  theme: 'system',
+  shortcuts: {
+    showMainWindow: 'Alt+Space',
+    showSearchWindow: 'Ctrl+Space'
+  }
 })
 
 // 加载状态
@@ -167,6 +215,20 @@ const handleSave = async () => {
     await setDefaultNotesLocation(localConfig.value.defaultNotesLocation)
     await setTheme(localConfig.value.theme)
 
+    // 保存快捷键配置
+    await setShortcuts(localConfig.value.shortcuts)
+
+    // 应用快捷键更新到全局快捷键
+    try {
+      await invoke('update_global_shortcuts', {
+        showMain: localConfig.value.shortcuts.showMainWindow,
+        showSearch: localConfig.value.shortcuts.showSearchWindow
+      })
+    } catch (error) {
+      console.error('更新全局快捷键失败:', error)
+      message.warning('快捷键更新失败，请重启应用')
+    }
+
     // 应用主题切换
     changeTheme(localConfig.value.theme as 'light' | 'dark' | 'cyberpunk' | 'system')
 
@@ -212,6 +274,20 @@ const handleReset = async () => {
   }
 }
 
+// 获取所有快捷键（用于冲突检测）
+const getAllShortcuts = () => {
+  return [
+    localConfig.value.shortcuts.showMainWindow,
+    localConfig.value.shortcuts.showSearchWindow
+  ]
+}
+
+// 恢复单个快捷键为默认值（仅更新本地状态）
+const resetShortcut = (key: keyof ShortcutsConfig) => {
+  const defaultValue = DEFAULT_SHORTCUTS[key]
+  localConfig.value.shortcuts[key] = defaultValue
+}
+
 // 关闭窗口
 const closeWindow = async () => {
   await currentWindow.hide()
@@ -228,6 +304,11 @@ const handleKeydown = (e: KeyboardEvent) => {
 onMounted(async () => {
   await loadSettings()
   document.addEventListener('keydown', handleKeydown)
+  
+  // 监听窗口焦点事件，窗口重新获得焦点时重新加载设置（解决未保存就关闭的问题）
+  currentWindow.listen('tauri://focus', async () => {
+    await loadSettings()
+  })
 })
 
 onUnmounted(() => {
@@ -267,7 +348,7 @@ onUnmounted(() => {
           <div class="theme-row">
             <!-- 亮色主题 -->
             <div 
-              class="theme-card" 
+              class="theme-card light-card" 
               :class="{ active: localConfig.theme === 'light' }"
               @click="localConfig.theme = 'light'"
             >
@@ -284,7 +365,7 @@ onUnmounted(() => {
             
             <!-- 暗色主题 -->
             <div 
-              class="theme-card" 
+              class="theme-card dark-card" 
               :class="{ active: localConfig.theme === 'dark' }"
               @click="localConfig.theme = 'dark'"
             >
@@ -304,7 +385,7 @@ onUnmounted(() => {
           <div class="theme-row">
             <!-- 赛博朋克主题 -->
             <div 
-              class="theme-card" 
+              class="theme-card cyberpunk-card" 
               :class="{ active: localConfig.theme === 'cyberpunk' }"
               @click="localConfig.theme = 'cyberpunk'"
             >
@@ -322,7 +403,7 @@ onUnmounted(() => {
             
             <!-- 跟随系统主题 -->
             <div 
-              class="theme-card" 
+              class="theme-card system-card" 
               :class="{ active: localConfig.theme === 'system' }"
               @click="localConfig.theme = 'system'"
             >
@@ -344,6 +425,65 @@ onUnmounted(() => {
         <NDivider title-placement="left" :class="{ 'cyberpunk-divider': isCyberpunk }">通用设置</NDivider>
         <NFormItem label="开机启动">
           <NSwitch v-model:value="localConfig.autoStart" />
+        </NFormItem>
+
+        <!-- 快捷键设置 -->
+        <NDivider title-placement="left" :class="{ 'cyberpunk-divider': isCyberpunk }">快捷键</NDivider>
+        
+        <NFormItem label="主窗口">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <KeybindingInput 
+              v-model="localConfig.shortcuts.showMainWindow"
+              :existing-shortcuts="getAllShortcuts()"
+            />
+            <NButton 
+              text
+              circle
+              size="small"
+              @click="resetShortcut('showMainWindow')"
+              :disabled="localConfig.shortcuts.showMainWindow === DEFAULT_SHORTCUTS.showMainWindow"
+              title="重置为默认"
+              :style="{ 
+                flexShrink: 0,
+                color: localConfig.shortcuts.showMainWindow !== DEFAULT_SHORTCUTS.showMainWindow ? resetButtonColor : undefined
+              }"
+              :class="{ 'cyberpunk-reset-btn': isCyberpunk && localConfig.shortcuts.showMainWindow !== DEFAULT_SHORTCUTS.showMainWindow }"
+            >
+              <template #icon>
+                <NIcon :size="18">
+                  <RefreshOutline />
+                </NIcon>
+              </template>
+            </NButton>
+          </div>
+        </NFormItem>
+
+        <NFormItem label="搜索窗口">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <KeybindingInput 
+              v-model="localConfig.shortcuts.showSearchWindow"
+              :existing-shortcuts="getAllShortcuts()"
+            />
+            <NButton 
+              text
+              circle
+              size="small"
+              @click="resetShortcut('showSearchWindow')"
+              :disabled="localConfig.shortcuts.showSearchWindow === DEFAULT_SHORTCUTS.showSearchWindow"
+              title="重置为默认"
+              :style="{ 
+                flexShrink: 0,
+                color: localConfig.shortcuts.showSearchWindow !== DEFAULT_SHORTCUTS.showSearchWindow ? resetButtonColor : undefined
+              }"
+              :class="{ 'cyberpunk-reset-btn': isCyberpunk && localConfig.shortcuts.showSearchWindow !== DEFAULT_SHORTCUTS.showSearchWindow }"
+            >
+              <template #icon>
+                <NIcon :size="18">
+                  <RefreshOutline />
+                </NIcon>
+              </template>
+            </NButton>
+          </div>
         </NFormItem>
 
         <!-- 编辑器设置 -->
@@ -583,27 +723,62 @@ onUnmounted(() => {
 
 .theme-card {
   flex: 1;
-  max-width: 125px;
+  max-width: 160px;
   position: relative;
   border-radius: 10px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid rgba(92, 207, 230, 0.2);
+  border: 2px solid rgba(156, 163, 175, 0.2);
   background: v-bind('themeVars.cardColor');
 }
 
 .theme-card:hover {
-  border-color: rgba(92, 207, 230, 0.5);
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(92, 207, 230, 0.2);
 }
 
-.theme-card.active {
-  border: 3px solid #5ccfe6;
-  box-shadow: 
-    0 0 0 3px rgba(92, 207, 230, 0.2),
-    0 8px 24px rgba(92, 207, 230, 0.3);
+/* 亮色主题卡片 - 更浅的紫色 */
+.theme-card.light-card {
+  border-color: v-bind('purpleColorAlpha(0.15)');
+}
+
+.theme-card.light-card:hover,
+.theme-card.light-card.active {
+  border-color: v-bind('purpleColorAlpha(0.5)');
+  box-shadow: 0 4px 16px v-bind('purpleColorAlpha(0.2)');
+}
+
+/* 暗色主题卡片 - 深紫色 */
+.theme-card.dark-card {
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.theme-card.dark-card:hover,
+.theme-card.dark-card.active {
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2);
+}
+
+/* 赛博朋克主题卡片 - 青色霓虹 */
+.theme-card.cyberpunk-card {
+  border-color: v-bind('cyanColorAlpha(0.2)');
+}
+
+.theme-card.cyberpunk-card:hover,
+.theme-card.cyberpunk-card.active {
+  border-color: v-bind('cyanColorAlpha(0.5)');
+  box-shadow: 0 4px 16px v-bind('cyanColorAlpha(0.2)');
+}
+
+/* 跟随系统主题卡片 - 浅紫色边框 + 内部滚动渐变线 */
+.theme-card.system-card {
+  border-color: v-bind('purpleColorAlpha(0.15)');
+}
+
+.theme-card.system-card:hover,
+.theme-card.system-card.active {
+  border-color: v-bind('purpleColorAlpha(0.5)');
+  box-shadow: 0 4px 16px v-bind('purpleColorAlpha(0.2)');
 }
 
 /* 主题预览区域 */
@@ -621,15 +796,15 @@ onUnmounted(() => {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #5ccfe6;
-  color: #0f1419;
+  background: v-bind('primaryColor');
+  color: v-bind('bgDark');
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
   font-size: 12px;
   z-index: 10;
-  box-shadow: 0 2px 8px rgba(92, 207, 230, 0.4);
+  box-shadow: 0 2px 8px v-bind('primaryColorAlpha(0.4)');
 }
 
 /* 主题信息区域 */
@@ -672,8 +847,8 @@ onUnmounted(() => {
   right: 0;
   height: 8px;
   background: linear-gradient(90deg, 
-    #a78bfa 0%,
-    #c4b5fd 100%
+    v-bind('primaryColor') 0%,
+    v-bind('primaryColorLight') 100%
   );
 }
 
@@ -695,10 +870,10 @@ onUnmounted(() => {
   right: 0;
   height: 8px;
   background: linear-gradient(90deg,
-    #8b5cf6 0%,
-    #a78bfa 100%
+    v-bind('primaryColorDark') 0%,
+    v-bind('primaryColor') 100%
   );
-  box-shadow: 0 0 8px rgba(167, 139, 250, 0.5);
+  box-shadow: 0 0 8px v-bind('primaryColorAlpha(0.5)');
 }
 
 /* ==================== 赛博朋克主题预览 ==================== */
@@ -706,7 +881,7 @@ onUnmounted(() => {
 .cyberpunk-preview .preview-gradient {
   width: 100%;
   height: 100%;
-  background: #0f1419;
+  background: v-bind('bgDark');
 }
 
 .cyberpunk-preview .neon-line {
@@ -718,21 +893,21 @@ onUnmounted(() => {
 }
 
 .cyberpunk-preview .neon-line.cyan {
-  top: 28px;
-  background: #5ccfe6;
+  top: 23px;
+  background: v-bind('primaryColor');
   box-shadow: 
-    0 0 8px #5ccfe6,
-    0 0 16px #5ccfe6,
-    0 0 24px rgba(92, 207, 230, 0.5);
+    0 0 8px v-bind('primaryColor'),
+    0 0 16px v-bind('primaryColor'),
+    0 0 24px v-bind('primaryColorAlpha(0.5)');
 }
 
 .cyberpunk-preview .neon-line.yellow {
-  top: 48px;
-  background: #ffcc66;
+  top: 40px;
+  background: v-bind('accentColor');
   box-shadow: 
-    0 0 8px #ffcc66,
-    0 0 16px #ffcc66,
-    0 0 24px rgba(255, 204, 102, 0.5);
+    0 0 8px v-bind('accentColor'),
+    0 0 16px v-bind('accentColor'),
+    0 0 24px v-bind('accentColorAlpha(0.5)');
 }
 
 /* ==================== 跟随系统主题预览 ==================== */
@@ -763,13 +938,7 @@ onUnmounted(() => {
   left: 50%;
   top: 0;
   bottom: 0;
-  width: 2px;
-  background: linear-gradient(to bottom,
-    #a78bfa 0%,
-    #5ccfe6 50%,
-    #ffcc66 100%
-  );
-  box-shadow: 0 0 8px rgba(92, 207, 230, 0.5);
+  width: 4px;
   transform: translateX(-50%);
 }
 
@@ -781,7 +950,7 @@ onUnmounted(() => {
   }
   
   .theme-card {
-    max-width: 110px;
+    max-width: 145px;
   }
   
   .theme-preview {
@@ -801,92 +970,113 @@ onUnmounted(() => {
 
 /* 窗口标题霓虹效果 */
 .cyberpunk-title {
-  color: #5ccfe6 !important;
+  color: v-bind('primaryColor') !important;
   text-shadow: 
-    0 0 6px rgba(92, 207, 230, 0.6),
-    0 0 12px rgba(92, 207, 230, 0.3);
+    0 0 6px v-bind('primaryColorAlpha(0.6)'),
+    0 0 12px v-bind('primaryColorAlpha(0.3)');
   animation: title-glow 3s ease-in-out infinite;
 }
 
 @keyframes title-glow {
   0%, 100% {
     text-shadow: 
-      0 0 6px rgba(92, 207, 230, 0.6),
-      0 0 12px rgba(92, 207, 230, 0.3);
+      0 0 6px v-bind('primaryColorAlpha(0.6)'),
+      0 0 12px v-bind('primaryColorAlpha(0.3)');
   }
   50% {
     text-shadow: 
-      0 0 8px rgba(92, 207, 230, 0.8),
-      0 0 16px rgba(92, 207, 230, 0.5);
+      0 0 8px v-bind('primaryColorAlpha(0.8)'),
+      0 0 16px v-bind('primaryColorAlpha(0.5)');
   }
 }
 
 /* 分隔线霓虹效果 */
+/* 系统卡片的滚动渐变线动画 - 保持原彩色渐变并流转 */
+.system-preview .system-divider {
+  background: linear-gradient(to bottom,
+    v-bind('purpleColor') 0%,
+    v-bind('cyanColor') 33.33%,
+    v-bind('accentColor') 66.66%,
+    v-bind('purpleColor') 100%
+  );
+  background-size: 100% 300%;
+  animation: gradient-scroll 2s linear infinite;
+}
+
+@keyframes gradient-scroll {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 0% 100%;
+  }
+}
+
 :deep(.cyberpunk-divider) {
   .n-divider__line {
     background: linear-gradient(90deg,
-      #5ccfe6 0%,
-      #ffcc66 50%,
-      #5ccfe6 100%
+      v-bind('primaryColor') 0%,
+      v-bind('accentColor') 50%,
+      v-bind('primaryColor') 100%
     );
     height: 2px !important;
     box-shadow: 
-      0 0 6px rgba(92, 207, 230, 0.6),
-      0 0 12px rgba(92, 207, 230, 0.4),
-      0 0 18px rgba(255, 204, 102, 0.3);
+      0 0 6px v-bind('primaryColorAlpha(0.6)'),
+      0 0 12px v-bind('primaryColorAlpha(0.4)'),
+      0 0 18px v-bind('accentColorAlpha(0.3)');
     animation: neon-pulse 2s ease-in-out infinite;
   }
   
   .n-divider__title {
-    color: #5ccfe6;
+    color: v-bind('primaryColor');
     text-shadow: 
-      0 0 4px rgba(92, 207, 230, 0.4),
-      0 0 8px rgba(92, 207, 230, 0.25);
+      0 0 4px v-bind('primaryColorAlpha(0.4)'),
+      0 0 8px v-bind('primaryColorAlpha(0.25)');
     font-weight: 600;
   }
 }
 
 /* 主按钮霓虹效果（保存） */
 :deep(.cyberpunk-button-primary) {
-  background: #5ccfe6 !important;
-  border-color: #5ccfe6 !important;
+  background: v-bind('primaryColor') !important;
+  border-color: v-bind('primaryColor') !important;
   box-shadow: 
-    0 0 12px rgba(92, 207, 230, 0.6),
-    0 0 24px rgba(92, 207, 230, 0.4),
+    0 0 12px v-bind('primaryColorAlpha(0.6)'),
+    0 0 24px v-bind('primaryColorAlpha(0.4)'),
     0 4px 8px rgba(0, 0, 0, 0.3) !important;
   transition: all 0.3s ease;
 }
 
 :deep(.cyberpunk-button-primary:hover) {
   box-shadow: 
-    0 0 16px rgba(92, 207, 230, 0.8),
-    0 0 32px rgba(92, 207, 230, 0.6),
-    0 0 48px rgba(92, 207, 230, 0.4),
+    0 0 16px v-bind('primaryColorAlpha(0.8)'),
+    0 0 32px v-bind('primaryColorAlpha(0.6)'),
+    0 0 48px v-bind('primaryColorAlpha(0.4)'),
     0 4px 12px rgba(0, 0, 0, 0.4) !important;
   transform: translateY(-1px);
 }
 
 :deep(.cyberpunk-button-primary:active) {
   box-shadow: 
-    0 0 8px rgba(92, 207, 230, 0.6),
-    0 0 16px rgba(92, 207, 230, 0.4),
+    0 0 8px v-bind('primaryColorAlpha(0.6)'),
+    0 0 16px v-bind('primaryColorAlpha(0.4)'),
     0 2px 4px rgba(0, 0, 0, 0.3) !important;
   transform: translateY(0);
 }
 
 /* 次要按钮霓虹效果（取消） */
 :deep(.cyberpunk-button-secondary) {
-  border-color: rgba(92, 207, 230, 0.5) !important;
+  border-color: v-bind('primaryColorAlpha(0.5)') !important;
   box-shadow: 
-    0 0 8px rgba(92, 207, 230, 0.3),
+    0 0 8px v-bind('primaryColorAlpha(0.3)'),
     0 2px 6px rgba(0, 0, 0, 0.2) !important;
 }
 
 :deep(.cyberpunk-button-secondary:hover) {
-  border-color: rgba(92, 207, 230, 0.8) !important;
+  border-color: v-bind('primaryColorAlpha(0.8)') !important;
   box-shadow: 
-    0 0 12px rgba(92, 207, 230, 0.5),
-    0 0 24px rgba(92, 207, 230, 0.3),
+    0 0 12px v-bind('primaryColorAlpha(0.5)'),
+    0 0 24px v-bind('primaryColorAlpha(0.3)'),
     0 4px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
@@ -914,31 +1104,46 @@ onUnmounted(() => {
 /* 滚动条霓虹效果 */
 .settings-window.cyberpunk-mode .settings-content::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, 
-    #5ccfe6 0%, 
-    #4fb3c9 50%, 
-    #5ccfe6 100%
+    v-bind('primaryColor') 0%, 
+    v-bind('primaryColorDark') 50%, 
+    v-bind('primaryColor') 100%
   );
   border-radius: 3px;
   box-shadow: 
-    0 0 8px rgba(92, 207, 230, 0.8),
-    0 0 16px rgba(92, 207, 230, 0.5);
+    0 0 8px v-bind('primaryColorAlpha(0.8)'),
+    0 0 16px v-bind('primaryColorAlpha(0.5)');
+  animation: scrollbar-pulse 2s ease-in-out infinite;
 }
 
 .settings-window.cyberpunk-mode .settings-content::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, 
-    #6fdbf0 0%, 
-    #5ccfe6 50%, 
-    #6fdbf0 100%
+    v-bind('primaryColorLight') 0%, 
+    v-bind('primaryColor') 50%, 
+    v-bind('primaryColorLight') 100%
   );
   box-shadow: 
-    0 0 12px rgba(92, 207, 230, 1),
-    0 0 24px rgba(92, 207, 230, 0.8),
-    0 0 36px rgba(92, 207, 230, 0.5);
+    0 0 12px v-bind('primaryColorAlpha(1)'),
+    0 0 24px v-bind('primaryColorAlpha(0.8)'),
+    0 0 36px v-bind('primaryColorAlpha(0.5)');
+  animation: scrollbar-pulse-hover 2s ease-in-out infinite;
 }
 
 .settings-window.cyberpunk-mode .settings-content::-webkit-scrollbar-track {
-  background: rgba(92, 207, 230, 0.05);
-  box-shadow: inset 0 0 6px rgba(92, 207, 230, 0.2);
+  background: v-bind('primaryColorAlpha(0.05)');
+  box-shadow: inset 0 0 6px v-bind('primaryColorAlpha(0.2)');
+}
+
+/* 赛博朋克主题的刷新按钮霓虹效果 */
+.cyberpunk-reset-btn {
+  filter: drop-shadow(0 0 4px v-bind('primaryColorAlpha(0.6)'))
+          drop-shadow(0 0 8px v-bind('primaryColorAlpha(0.4)'));
+  transition: all 0.3s ease;
+}
+
+.cyberpunk-reset-btn:hover {
+  filter: drop-shadow(0 0 6px v-bind('primaryColorAlpha(0.8)'))
+          drop-shadow(0 0 12px v-bind('primaryColorAlpha(0.6)'))
+          drop-shadow(0 0 16px v-bind('primaryColorAlpha(0.4)'));
 }
 
 /* 霓虹脉冲动画 */
@@ -946,16 +1151,45 @@ onUnmounted(() => {
   0%, 100% {
     opacity: 1;
     box-shadow: 
-      0 0 6px rgba(92, 207, 230, 0.6),
-      0 0 12px rgba(92, 207, 230, 0.4),
-      0 0 18px rgba(255, 204, 102, 0.3);
+      0 0 6px v-bind('primaryColorAlpha(0.6)'),
+      0 0 12px v-bind('primaryColorAlpha(0.4)'),
+      0 0 18px v-bind('accentColorAlpha(0.3)');
   }
   50% {
     opacity: 1;
     box-shadow: 
-      0 0 8px rgba(92, 207, 230, 0.8),
-      0 0 16px rgba(92, 207, 230, 0.6),
-      0 0 24px rgba(255, 204, 102, 0.5);
+      0 0 8px v-bind('primaryColorAlpha(0.8)'),
+      0 0 16px v-bind('primaryColorAlpha(0.6)'),
+      0 0 24px v-bind('accentColorAlpha(0.5)');
+  }
+}
+
+/* 滚动条呼吸动画 */
+@keyframes scrollbar-pulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 8px v-bind('primaryColorAlpha(0.8)'),
+      0 0 16px v-bind('primaryColorAlpha(0.6)');
+  }
+  50% {
+    box-shadow: 
+      0 0 12px v-bind('primaryColorAlpha(1)'),
+      0 0 24px v-bind('primaryColorAlpha(0.8)');
+  }
+}
+
+@keyframes scrollbar-pulse-hover {
+  0%, 100% {
+    box-shadow: 
+      0 0 12px v-bind('primaryColorAlpha(1)'),
+      0 0 24px v-bind('primaryColorAlpha(0.8)'),
+      0 0 36px v-bind('primaryColorAlpha(0.5)');
+  }
+  50% {
+    box-shadow: 
+      0 0 16px v-bind('primaryColorAlpha(1)'),
+      0 0 32px v-bind('primaryColorAlpha(1)'),
+      0 0 48px v-bind('primaryColorAlpha(0.6)');
   }
 }
 </style>
