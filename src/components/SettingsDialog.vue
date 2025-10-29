@@ -143,6 +143,7 @@ import {
   setAutoStart,
   setSearchDirectories,
   setDefaultNotesLocation,
+  DEFAULT_SHORTCUTS,
   type AppConfig
 } from '../utils/configStore';
 import { showError, showInfo } from '../utils/dialogHelper';
@@ -167,7 +168,8 @@ const localConfig = ref<AppConfig>({
   searchDirectories: [],
   defaultNotesLocation: '',
   notes: [],
-  theme: 'system'
+  theme: 'system',
+  shortcuts: DEFAULT_SHORTCUTS
 });
 
 // 加载配置
@@ -284,7 +286,8 @@ const handleReset = async () => {
     searchDirectories: [],
     defaultNotesLocation: '',
     notes: [],
-    theme: 'system'
+    theme: 'system',
+    shortcuts: DEFAULT_SHORTCUTS
   };
 };
 
