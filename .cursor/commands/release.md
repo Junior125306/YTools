@@ -205,7 +205,22 @@ git diff --staged --stat
 
 ---
 
-### 5. 生成 Commit Message
+### 5. 测试构建
+
+**在提交前必须测试构建**:
+
+```bash
+pnpm build
+```
+
+**要求**:
+- 构建必须成功（无 TypeScript 错误）
+- 如果构建失败，必须先修复错误再继续
+- 警告可以忽略，但错误必须修复
+
+---
+
+### 6. 生成 Commit Message
 
 **自动生成符合约定式提交规范的消息**:
 
@@ -263,7 +278,7 @@ feat(settings): 新增快捷键自定义功能
 
 ---
 
-### 6. 执行 Git 操作
+### 7. 执行 Git 操作
 
 **自动执行以下命令**:
 
@@ -289,7 +304,7 @@ git push origin v0.2.0
 
 ---
 
-### 7. 完成报告
+### 8. 完成报告
 
 **自动显示**:
 
@@ -342,6 +357,8 @@ git push origin v0.2.0
 - [ ] **使用 `search_replace` 更新 `CHANGELOG.md` 底部版本链接（在 commit 之前！）**
 - [ ] 使用 `search_replace` 更新 `README.md` 已实现功能（如果是 feat）
 - [ ] 使用 `search_replace` 更新 `README.md` 开发路线图（删除已完成项）
+- [ ] **执行 `pnpm build` 测试构建（必须成功）**
+- [ ] 如果构建失败，修复错误并提交修复后再继续
 - [ ] 生成简洁的 commit message（3-5 个要点，聚焦用户价值）
 - [ ] 执行 `git add .`
 - [ ] 执行 `git commit -m "..."`
