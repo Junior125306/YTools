@@ -16,6 +16,14 @@
 - 远程桌面快捷方式
 - 工单管理系统
 
+## [0.4.1] - 2025-10-29
+
+### Fixed (修复)
+
+- 🐛 修复配置对象缺失字段（notes、theme）导致的潜在错误
+- 🐛 修复未使用参数命名规范问题，避免 TypeScript 编译警告
+- 🐛 统一产品名称大小写（ytools → YTools），保持品牌一致性
+
 ## [0.4.0] - 2025-10-28
 
 ### Added (新增)
@@ -209,7 +217,8 @@
 
 ---
 
-[Unreleased]: https://github.com/yourusername/ytools/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/yourusername/ytools/releases/tag/v0.4.1
 [0.4.0]: https://github.com/yourusername/ytools/releases/tag/v0.4.0
 [0.3.0]: https://github.com/yourusername/ytools/releases/tag/v0.3.0
 [0.2.1]: https://github.com/yourusername/ytools/releases/tag/v0.2.1

@@ -6,27 +6,27 @@ const { message, dialog } = createDiscreteApi(['message', 'dialog'])
 /**
  * 显示信息提示框
  * @param text 提示文本
- * @param title 标题（可选）
+ * @param _title 标题（可选，暂未使用）
  */
-export async function showInfo(text: string, title = '提示'): Promise<void> {
+export async function showInfo(text: string, _title = '提示'): Promise<void> {
   message.info(text, { duration: 2500 })
 }
 
 /**
  * 显示警告提示框
  * @param text 警告文本
- * @param title 标题（可选）
+ * @param _title 标题（可选，暂未使用）
  */
-export async function showWarning(text: string, title = '警告'): Promise<void> {
+export async function showWarning(text: string, _title = '警告'): Promise<void> {
   message.warning(text, { duration: 3000 })
 }
 
 /**
  * 显示错误提示框
  * @param text 错误文本
- * @param title 标题（可选）
+ * @param _title 标题（可选，暂未使用）
  */
-export async function showError(text: string, title = '错误'): Promise<void> {
+export async function showError(text: string, _title = '错误'): Promise<void> {
   message.error(text, { duration: 3000 })
 }
 
@@ -76,9 +76,9 @@ export async function showAsk(
 /**
  * 显示成功消息
  * @param text 成功文本
- * @param title 标题（可选）
+ * @param _title 标题（可选，暂未使用）
  */
-export async function showSuccess(text: string, title = '成功'): Promise<void> {
+export async function showSuccess(text: string, _title = '成功'): Promise<void> {
   message.success(text, { duration: 2500 })
 }
 

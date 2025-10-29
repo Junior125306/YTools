@@ -165,7 +165,9 @@ const localConfig = ref<AppConfig>({
   lineHeight: 1.6,
   autoStart: false,
   searchDirectories: [],
-  defaultNotesLocation: ''
+  defaultNotesLocation: '',
+  notes: [],
+  theme: 'system'
 });
 
 // 加载配置
@@ -280,7 +282,9 @@ const handleReset = async () => {
     lineHeight: 1.6,
     autoStart: false,
     searchDirectories: [],
-    defaultNotesLocation: ''
+    defaultNotesLocation: '',
+    notes: [],
+    theme: 'system'
   };
 };
 
