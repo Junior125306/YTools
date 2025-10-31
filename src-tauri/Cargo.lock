@@ -5562,7 +5562,7 @@ dependencies = [
 
 [[package]]
 name = "ytools"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "dirs 5.0.1",
  "pinyin",
@@ -5576,6 +5576,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
  "tauri-plugin-store",
+ "tempfile",
 ]
 
 [[package]]
