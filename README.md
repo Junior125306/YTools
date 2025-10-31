@@ -10,6 +10,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue.svg)](https://tauri.app/)
 [![Vue.js](https://img.shields.io/badge/Vue-3.x-green.svg)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+[![Naive UI](https://img.shields.io/badge/Naive%20UI-2.43-green.svg)](https://www.naiveui.com/)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 
 </div>
@@ -137,13 +138,7 @@
 
 - [ ] **JSON 工具**
   - JSON 格式化
-  - JSON 验证
   - JSON 转换（压缩/美化）
-- [ ] **加解密工具**
-  - AES 加密/解密
-  - Base64 编码/解码
-  - MD5/SHA 哈希计算
-  - URL 编码/解码
 
 #### 🖥 远程管理（计划中）
 
@@ -151,10 +146,6 @@
   - 保存常用远程桌面连接
   - 一键启动 RDP/VNC
   - 连接历史记录
-- [ ] **工单管理**
-  - 快速登记工单
-  - 查看工单状态
-  - 工单提醒功能
 
 #### 📌 笔记增强
 
@@ -334,6 +325,7 @@ YTools/
 
 - [Tauri](https://tauri.app/) - 轻量级桌面应用框架
 - [Vue.js](https://vuejs.org/) - 渐进式 JavaScript 框架
+- [Naive UI](https://www.naiveui.com/) - 完整的 Vue 3 组件库和设计系统
 - [Vite](https://vitejs.dev/) - 下一代前端构建工具
 - [Rust](https://www.rust-lang.org/) - 高性能系统编程语言
 
@@ -346,14 +338,3 @@ YTools/
 如果觉得有用，请给个 ⭐️ Star 支持一下！
 
 </div>
-
-使用 cursor 开发体验吐槽 （只说不好的地方我自己的体验，随地大小槽）：
-
-1. cursor 自己的模型 composer 审美不行
-2. ai 不懂得自己优化代码,很多函数内容基本是重复的，且都有优化的方向，很多时候需要我给他说，这两个函数高度重复之类的
-3. 想要舒心的vibe coding体验，最好给ai准备好测试方式，本项目前期都是我自己测试不停的交流，也很繁琐
-4. ai 很喜欢骗你
-5. ai 总是说 由于xxx比较复杂，让我们先实现一个简化的版本 🤬
-6. ai 并不能分辨代码的真正意图，包括自己写的，比如 保留旧版实现方式的一部分代码
-7. 我让ai封装一下 新窗口打开modal并且传递事件得东西，它封装了传递事件得交 modalxxx，打开modal得教openModalxx, 可是这些工具函数明明通用一点就很好不只是打开modal，不只是传递modal得事件，不过还好有planmode
-8. vibe coding 绝对不要 让ai一次性重构很多东西，并且不按阶段测试提交。。。。会很绝望，可能是本项目我一行代码没看过
