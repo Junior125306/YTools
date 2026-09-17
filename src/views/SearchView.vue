@@ -8,6 +8,8 @@ import {
 import { SearchOutline, FolderOutline } from '@vicons/ionicons5'
 import { getSearchDirectories } from '../utils/configStore'
 import { useTheme } from '../composables/useTheme'
+import { ACCENT } from '../constants/theme'
+import type { WorkspaceHit } from '../types/workspace'
 
 const themeVars = useThemeVars()
 // 初始化主题并监听主题变更
@@ -17,14 +19,14 @@ const { themeMode } = useTheme()
 const isCyberpunk = computed(() => themeMode.value === 'cyberpunk')
 
 // ==== 主题颜色变量 ====
-const primaryColor = computed(() => '#5ccfe6')
-const primaryColorLight = computed(() => '#6fdbf0')
-const primaryColorDark = computed(() => '#4fb3c9')
+const primaryColor = computed(() => ACCENT.cyan)
+const primaryColorLight = computed(() => ACCENT.cyanHover)
+const primaryColorDark = computed(() => ACCENT.cyanPressed)
 const primaryColorAlpha = (alpha: number) => `rgba(92, 207, 230, ${alpha})`
 
 const searchInput = ref<any>(null)
 const query = ref('')
-const searchResults = ref<string[]>([])
+const searchResults = ref<WorkspaceHit[]>([])
 const selectedIndex = ref(0)
 const currentWindow = getCurrentWindow()
 const isOpening = ref(false)
@@ -45,30 +47,28 @@ async function performSearch(searchQuery: string) {
     
     hasSearchDirectories.value = true
     
-    searchResults.value = await invoke<string[]>('search_workspaces', { 
+    searchResults.value = await invoke<WorkspaceHit[]>('search_workspaces', { 
       query: searchQuery || '',
       directories
     })
     selectedIndex.value = 0
     resultRefs.value = []
-  } catch (error) {
-    console.error('搜索失败:', error)
+  } catch {
     searchResults.value = []
     resultRefs.value = []
   }
 }
 
 // 打开文件夹
-async function openFolder(folderName: string) {
+async function openFolder(hit: WorkspaceHit) {
   if (isOpening.value) return
   isOpening.value = true
   try {
     await currentWindow.hide().catch(() => {})
     query.value = ''
     searchResults.value = []
-    await invoke('open_folder', { folder_name: folderName, folderName: folderName })
-  } catch (error) {
-    console.error('打开文件夹失败:', error)
+    await invoke('open_directory', { path: hit.path })
+  } catch {
     await currentWindow.hide().catch(() => {})
   }
   finally {
@@ -218,16 +218,19 @@ onUnmounted(() => {
         <NList v-else hoverable clickable style="height: 100%; overflow-y: auto;">
           <NListItem
             v-for="(result, index) in searchResults"
-            :key="result"
+            :key="result.path"
             :ref="(el: any) => setResultRef(el, index)"
             :class="{ 'selected-item': index === selectedIndex }"
             @click="clickItem(index)"
             @mouseenter="selectItem(index)"
           >
             <template #prefix>
-              <NIcon size="24" color="#818cf8"><FolderOutline /></NIcon>
+              <NIcon size="24" :color="primaryColor"><FolderOutline /></NIcon>
             </template>
-            <NText>{{ result }}</NText>
+            <div class="result-main">
+              <NText class="result-name">{{ result.name }}</NText>
+              <NText depth="3" class="result-path" :title="result.path">{{ result.path }}</NText>
+            </div>
           </NListItem>
         </NList>
       </div>
@@ -310,7 +313,26 @@ onUnmounted(() => {
 }
 
 .search-container :deep(.n-list-item__main) {
-  border-radius: 0 !important;
+  min-width: 0;
+}
+
+.result-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.result-name {
+  line-height: 1.3;
+}
+
+.result-path {
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-container :deep(.n-list-item:first-child),

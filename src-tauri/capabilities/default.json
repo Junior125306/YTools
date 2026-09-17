@@ -23,6 +23,7 @@
     "fs:allow-exists",
     "store:default",
     "dialog:default",
-    "autostart:default"
+    "autostart:default",
+    "global-shortcut:default"
   ]
 }

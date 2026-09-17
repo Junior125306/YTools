@@ -12,6 +12,7 @@ import {
 } from 'naive-ui'
 import { AddOutline, TrashOutline, CloseOutline, SettingsOutline, RefreshOutline } from '@vicons/ionicons5'
 import { useTheme } from '../composables/useTheme'
+import { ACCENT, tealAlpha, cyanAlpha } from '../constants/theme'
 import KeybindingInput from '../components/KeybindingInput.vue'
 
 const themeVars = useThemeVars()
@@ -41,15 +42,14 @@ const isCyberpunk = computed(() => themeMode.value === 'cyberpunk')
 
 // ==== 主题颜色变量 ====
 // 主色调（根据当前应用的主题）
-const primaryColor = computed(() => isCyberpunk.value ? '#5ccfe6' : '#a78bfa')
-const primaryColorLight = computed(() => isCyberpunk.value ? '#6fdbf0' : '#c4b5fd')
-const primaryColorDark = computed(() => isCyberpunk.value ? '#4fb3c9' : '#8b5cf6')
+const primaryColor = computed(() => isCyberpunk.value ? ACCENT.cyan : ACCENT.teal)
+const primaryColorLight = computed(() => isCyberpunk.value ? ACCENT.cyanHover : ACCENT.tealSoft)
+const primaryColorDark = computed(() => isCyberpunk.value ? ACCENT.cyanPressed : ACCENT.tealHover)
 
-// 固定颜色（用于主题卡片，不随当前主题变化）
-const purpleColor = '#a78bfa'
-const purpleColorAlpha = (alpha: number) => `rgba(167, 139, 250, ${alpha})`
-const cyanColor = '#5ccfe6'
-const cyanColorAlpha = (alpha: number) => `rgba(92, 207, 230, ${alpha})`
+const tealColor = ACCENT.teal
+const tealColorAlpha = tealAlpha
+const cyanColor = ACCENT.cyan
+const cyanColorAlpha = cyanAlpha
 
 // 次要色（黄色 - 仅赛博朋克）
 const accentColor = computed(() => '#ffcc66')
@@ -59,7 +59,7 @@ const primaryColorAlpha = (alpha: number) => {
   if (isCyberpunk.value) {
     return `rgba(92, 207, 230, ${alpha})`
   }
-  return `rgba(167, 139, 250, ${alpha})`
+  return tealAlpha(alpha)
 }
 
 // 黄色半透明（赛博朋克次要色）
@@ -138,8 +138,7 @@ const loadSettings = async () => {
       ...config,
       searchDirectories: Array.isArray(config.searchDirectories) ? config.searchDirectories : []
     }
-  } catch (error) {
-    console.error('加载设置失败:', error)
+  } catch {
     message.error('加载设置失败')
   } finally {
     isLoading.value = false
@@ -163,8 +162,7 @@ const addDirectory = async () => {
         localConfig.value.searchDirectories.push(selected)
       }
     }
-  } catch (error) {
-    console.error('选择目录失败:', error)
+  } catch {
     message.error('选择目录失败')
   }
 }
@@ -186,8 +184,7 @@ const selectNotesLocation = async () => {
     if (selected && typeof selected === 'string') {
       localConfig.value.defaultNotesLocation = selected
     }
-  } catch (error) {
-    console.error('选择目录失败:', error)
+  } catch {
     message.error('选择目录失败')
   }
 }
@@ -198,8 +195,7 @@ const handleOpenPath = async () => {
     const path = await getActualPath()
     // 调用 Rust 命令打开文件夹
     await invoke('open_directory', { path })
-  } catch (error) {
-    console.error('打开目录失败:', error)
+  } catch {
     message.error('打开目录失败')
   }
 }
@@ -224,8 +220,7 @@ const handleSave = async () => {
         showMain: localConfig.value.shortcuts.showMainWindow,
         showSearch: localConfig.value.shortcuts.showSearchWindow
       })
-    } catch (error) {
-      console.error('更新全局快捷键失败:', error)
+    } catch {
       message.warning('快捷键更新失败，请重启应用')
     }
 
@@ -239,8 +234,8 @@ const handleSave = async () => {
       } else {
         await disableAutostart()
       }
-    } catch (error) {
-      console.error('设置开机启动失败:', error)
+    } catch {
+      // 开机启动设置失败时不影响其他配置
     }
 
     // 通知主窗口重新加载配置
@@ -250,14 +245,13 @@ const handleSave = async () => {
       if (mainWindow) {
         await mainWindow.emit('settings-saved', {})
       }
-    } catch (error) {
-      console.error('通知主窗口失败:', error)
+    } catch {
+      // 主窗口通知失败不影响保存
     }
 
     // 显示成功提示（不关闭窗口）
     message.success('设置已保存', { duration: 2000 })
-  } catch (error) {
-    console.error('保存设置失败:', error)
+  } catch {
     message.error('保存设置失败')
   }
 }
@@ -268,8 +262,7 @@ const handleReset = async () => {
     await resetConfig()
     await loadSettings()
     message.success('已重置为默认设置', { duration: 2000 })
-  } catch (error) {
-    console.error('重置设置失败:', error)
+  } catch {
     message.error('重置设置失败')
   }
 }
@@ -739,24 +732,24 @@ onUnmounted(() => {
 
 /* 亮色主题卡片 - 更浅的紫色 */
 .theme-card.light-card {
-  border-color: v-bind('purpleColorAlpha(0.15)');
+  border-color: v-bind('tealColorAlpha(0.15)');
 }
 
 .theme-card.light-card:hover,
 .theme-card.light-card.active {
-  border-color: v-bind('purpleColorAlpha(0.5)');
-  box-shadow: 0 4px 16px v-bind('purpleColorAlpha(0.2)');
+  border-color: v-bind('tealColorAlpha(0.5)');
+  box-shadow: 0 4px 16px v-bind('tealColorAlpha(0.2)');
 }
 
 /* 暗色主题卡片 - 深紫色 */
 .theme-card.dark-card {
-  border-color: rgba(139, 92, 246, 0.2);
+  border-color: rgba(13, 148, 136, 0.2);
 }
 
 .theme-card.dark-card:hover,
 .theme-card.dark-card.active {
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2);
+  border-color: rgba(13, 148, 136, 0.5);
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.2);
 }
 
 /* 赛博朋克主题卡片 - 青色霓虹 */
@@ -772,13 +765,13 @@ onUnmounted(() => {
 
 /* 跟随系统主题卡片 - 浅紫色边框 + 内部滚动渐变线 */
 .theme-card.system-card {
-  border-color: v-bind('purpleColorAlpha(0.15)');
+  border-color: v-bind('tealColorAlpha(0.15)');
 }
 
 .theme-card.system-card:hover,
 .theme-card.system-card.active {
-  border-color: v-bind('purpleColorAlpha(0.5)');
-  box-shadow: 0 4px 16px v-bind('purpleColorAlpha(0.2)');
+  border-color: v-bind('tealColorAlpha(0.5)');
+  box-shadow: 0 4px 16px v-bind('tealColorAlpha(0.2)');
 }
 
 /* 主题预览区域 */
@@ -994,10 +987,10 @@ onUnmounted(() => {
 /* 系统卡片的滚动渐变线动画 - 保持原彩色渐变并流转 */
 .system-preview .system-divider {
   background: linear-gradient(to bottom,
-    v-bind('purpleColor') 0%,
+    v-bind('tealColor') 0%,
     v-bind('cyanColor') 33.33%,
     v-bind('accentColor') 66.66%,
-    v-bind('purpleColor') 100%
+    v-bind('tealColor') 100%
   );
   background-size: 100% 300%;
   animation: gradient-scroll 2s linear infinite;

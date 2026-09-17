@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { NTabs, NTabPane, NButton, NIcon, NSpace, NText, useThemeVars } from 'naive-ui';
@@ -10,7 +10,7 @@ import { initConfig, getFontSize, setFontSize, getFontFamily, getLineHeight, get
 import { showError, showInfo, showWarning, showConfirm } from '../utils/dialogHelper';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { useTheme } from '../composables/useTheme';
-import { computed } from 'vue';
+import { ACCENT } from '../constants/theme';
 
 const themeVars = useThemeVars();
 // 初始化主题并监听主题变更
@@ -21,8 +21,8 @@ const isCyberpunk = computed(() => themeMode.value === 'cyberpunk');
 
 // ==== 主题颜色变量 ====
 // 主色调（青色 - 赛博朋克固定使用青色）
-const primaryColor = computed(() => '#5ccfe6')
-const primaryColorLight = computed(() => '#6fdbf0')
+const primaryColor = computed(() => ACCENT.cyan)
+const primaryColorLight = computed(() => ACCENT.cyanHover)
 
 // 次要色（黄色 - 赛博朋克专用）
 const accentColor = computed(() => '#ffcc66')
@@ -40,7 +40,8 @@ const saveStatus = ref<string>('');
 // 已移除 Markdown 模式，使用纯文本编辑
 let autoSaveTimer: number | null = null;
 let isInitialLoad = true; // 标记是否是初始加载
-const showCreateDialog = ref(false); // 控制新建笔记对话框显示
+const editorRef = ref<InstanceType<typeof TextEditor> | null>(null);
+const showCreateDialog = ref(false);
 const fontSize = ref<number>(16); // 字体大小，默认 16px
 const fontFamily = ref<string>("Consolas, 'Courier New', monospace"); // 字体族
 const lineHeight = ref<number>(1.6); // 行高
@@ -69,9 +70,8 @@ async function loadConfig() {
     fontSize.value = await getFontSize();
     fontFamily.value = await getFontFamily();
     lineHeight.value = await getLineHeight();
-  } catch (error) {
-    console.error('加载配置失败:', error);
-    fontSize.value = 16; // 使用默认值
+  } catch {
+    fontSize.value = 16;
     fontFamily.value = "Consolas, 'Courier New', monospace";
     lineHeight.value = 1.6;
     await showError('加载配置失败，已使用默认值');
@@ -83,8 +83,8 @@ async function handleFontSizeChange(newSize: number) {
   fontSize.value = newSize;
   try {
     await setFontSize(newSize);
-  } catch (error) {
-    console.error('保存字体大小失败:', error);
+  } catch {
+    // 字体大小写入失败时界面仍使用当前值
   }
 }
 
@@ -105,8 +105,7 @@ async function loadNotes() {
     } else {
       activeNote.value = '';
     }
-  } catch (error) {
-    console.error('加载笔记列表失败:', error);
+  } catch {
     notes.value = [];
     activeNote.value = '';
     await showError('加载笔记列表失败');
@@ -129,8 +128,7 @@ async function loadNote(notePath: string) {
     setTimeout(() => {
       isInitialLoad = false;
     }, 100);
-  } catch (error) {
-    console.error('加载笔记失败:', error);
+  } catch {
     content.value = '';
     isInitialLoad = false;
   }
@@ -149,8 +147,7 @@ async function saveNote() {
       content: content.value,
     });
     saveStatus.value = 'saved';
-  } catch (error) {
-    console.error('保存失败:', error);
+  } catch {
     saveStatus.value = 'failed';
     await showError('保存笔记失败，请检查文件权限或磁盘空间');
   } finally {
@@ -205,8 +202,7 @@ async function handleCreateConfirm(noteName: string) {
     switchNote(newPath);
     
     await showInfo(`笔记 "${noteName}" 创建成功！`);
-  } catch (error) {
-    console.error('创建笔记失败:', error);
+  } catch {
     await showError('创建笔记失败');
   }
 }
@@ -237,38 +233,27 @@ async function importNote() {
     switchNote(filePath);
     
     await showInfo('笔记已导入');
-  } catch (error) {
-    console.error('导入笔记失败:', error);
+  } catch {
     await showError('导入笔记失败');
   }
 }
 
-// 删除笔记
+// 从列表移除笔记（不删除磁盘文件）
 async function deleteNote(notePath: string) {
   const fileName = getFileName(notePath);
-  
-  const deleteFile = await showConfirm(
-    `是否删除文件 "${fileName}"？\n\n确定：永久删除文件\n取消：仅从列表移除`,
-    '删除笔记'
+
+  const confirmed = await showConfirm(
+    `将「${fileName}」从列表中移除？磁盘上的文件不会被删除。`,
+    '移除笔记'
   );
-  
-  if (deleteFile) {
-    try {
-      await invoke('delete_note_file', { path: notePath });
-      await removeNote(notePath);
-      await showInfo('文件已删除');
-    } catch (error) {
-      console.error('删除文件失败:', error);
-      await showError('删除文件失败');
-      return;
-    }
-  } else {
-    await removeNote(notePath);
+
+  if (!confirmed) {
+    return;
   }
-  
+
+  await removeNote(notePath);
   await loadNotes();
-  
-  // 切换到第一个笔记或空白
+
   if (activeNote.value === notePath) {
     if (notes.value.length > 0) {
       switchNote(notes.value[0]);
@@ -279,7 +264,7 @@ async function deleteNote(notePath: string) {
   }
 }
 
-// 自动保存 (内容变化后 2 秒自动保存)
+// 自动保存（输入停止 0.8 秒后）
 watch(content, () => {
   // 跳过初始加载时的触发
   if (isInitialLoad) {
@@ -292,7 +277,7 @@ watch(content, () => {
   
   autoSaveTimer = setTimeout(() => {
     saveNote();
-  }, 2000) as unknown as number;
+  }, 800) as unknown as number;
 });
 
 // 监听笔记切换
@@ -312,8 +297,14 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
   
-  // ESC 键隐藏窗口
+  // ESC：查找面板打开时只关面板；否则隐藏窗口
   if (e.key === 'Escape') {
+    if (editorRef.value?.isSearchOpen?.()) {
+      editorRef.value.closeSearch?.();
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
     e.preventDefault();
     hideWindow();
     return;
@@ -331,8 +322,8 @@ async function hideWindow() {
   try {
     const appWindow = getCurrentWindow();
     await appWindow.hide();
-  } catch (error) {
-    console.error('隐藏窗口失败:', error);
+  } catch {
+    // 隐藏失败时忽略
   }
 }
 
@@ -373,12 +364,10 @@ async function openSettings() {
     });
 
     // 监听错误
-    newWindow.once('tauri://error', (error) => {
-      console.error('设置窗口创建失败:', error);
+    newWindow.once('tauri://error', () => {
       showError('打开设置窗口失败');
     });
   } catch (error) {
-    console.error('打开设置窗口出错:', error);
     await showError('打开设置窗口失败: ' + error);
   }
 }
@@ -397,7 +386,7 @@ onMounted(async () => {
     await loadNote(activeNote.value);
   }
   
-  window.addEventListener('keydown', handleKeydown);
+  window.addEventListener('keydown', handleKeydown, true);
   
   // 监听来自托盘菜单的设置事件
   const appWindow = getCurrentWindow();
@@ -407,7 +396,6 @@ onMounted(async () => {
   
   // 监听设置保存事件，重新加载配置
   unlistenSettingsSaved = await appWindow.listen('settings-saved', async () => {
-    console.log('收到设置保存事件，重新加载配置');
     await loadConfig();
   });
   
@@ -416,7 +404,7 @@ onMounted(async () => {
 
 // 清理事件监听
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown);
+  window.removeEventListener('keydown', handleKeydown, true);
   if (autoSaveTimer) {
     clearTimeout(autoSaveTimer);
   }
@@ -434,9 +422,8 @@ onUnmounted(() => {
 
 <template>
   <div class="app-container" :class="{ 'cyberpunk-mode': isCyberpunk }">
-    <!-- Tab 标签页 -->
+    <template v-if="notes.length > 0">
     <NTabs
-      v-if="notes.length > 0"
       v-model:value="activeNote"
       type="card"
       addable
@@ -452,21 +439,8 @@ onUnmounted(() => {
         :key="notePath"
         :name="notePath"
         :tab="getFileName(notePath)"
-      >
-        <div class="editor-wrapper">
-          <TextEditor
-            v-model="content"
-            :height="'100%'"
-            :font-size="fontSize"
-            :font-family="fontFamily"
-            :line-height="lineHeight"
-            :save-status="saveStatus"
-            @change="handleContentChange"
-            @update:fontSize="handleFontSizeChange"
-          />
-        </div>
-      </NTabPane>
-      
+      ></NTabPane>
+
       <!-- Tab 尾部插槽：其他操作按钮 -->
       <template #suffix>
         <NButton 
@@ -494,6 +468,20 @@ onUnmounted(() => {
         </NButton>
       </template>
     </NTabs>
+    <div class="editor-wrapper">
+      <TextEditor
+        ref="editorRef"
+        v-model="content"
+        :height="'100%'"
+        :font-size="fontSize"
+        :font-family="fontFamily"
+        :line-height="lineHeight"
+        :save-status="saveStatus"
+        @change="handleContentChange"
+        @update:fontSize="handleFontSizeChange"
+      />
+    </div>
+    </template>
 
     <!-- 无笔记状态 -->
     <div v-else class="empty-container">
@@ -545,7 +533,7 @@ onUnmounted(() => {
     <InputDialog
       v-model="showCreateDialog"
       title="新建笔记"
-      placeholder="请输入笔记名称（不需要 .md 后缀）"
+      placeholder="请输入笔记名称"
       @confirm="handleCreateConfirm"
       @cancel="handleCreateCancel"
     />
@@ -562,10 +550,11 @@ onUnmounted(() => {
 }
 
 .note-tabs {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+}
+
+.note-tabs :deep(.n-tabs-pane-wrapper) {
+  display: none;
 }
 
 .note-tabs :deep(.n-tabs-nav) {
@@ -573,7 +562,7 @@ onUnmounted(() => {
   padding: 8px 16px;
   background-color: v-bind('themeVars.cardColor');
   /* 亮色模式下增强底部边框 */
-  border-bottom: 1px solid rgba(167, 139, 250, 0.25);
+  border-bottom: 1px solid rgba(13, 148, 136, 0.25);
 }
 
 .note-tabs :deep(.n-tabs-tab) {
@@ -593,24 +582,13 @@ onUnmounted(() => {
   margin-right: -4px;
 }
 
-.note-tabs :deep(.n-tabs-pane-wrapper) {
-  flex: 1;
-  overflow: hidden;
-  padding-top: 8px;
-}
-
-.note-tabs :deep(.n-tab-pane) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
 .editor-wrapper {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 4px 14px 14px 14px;
-  overflow: visible;
+  padding: 8px 14px 14px 14px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .empty-container {

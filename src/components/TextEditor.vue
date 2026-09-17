@@ -1,6 +1,5 @@
 <template>
-  <div class="text-editor-container">
-    <!-- 保存状态指示器 -->
+  <div class="text-editor-container" :class="{ 'is-dark': isDark }" @wheel="handleWheel">
     <transition name="fade">
       <div v-if="showSaveStatus" class="save-status-indicator">
         <NSpin v-if="saveStatus === 'saving'" :size="18" />
@@ -12,28 +11,24 @@
         </NIcon>
       </div>
     </transition>
-    
-    <textarea
-      ref="textareaRef"
-      v-model="localValue"
-      :placeholder="placeholder"
-      :style="{
-        height: height,
-        fontSize: fontSize + 'px',
-        fontFamily: fontFamily,
-        lineHeight: lineHeight
-      }"
-      class="text-editor"
-      @input="handleInput"
-      @wheel="handleWheel"
-    ></textarea>
+    <div ref="editorHost" class="cm-host"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
 import { NIcon, NSpin } from 'naive-ui';
 import { CheckmarkCircleOutline, CloseCircleOutline } from '@vicons/ionicons5';
+import { EditorView, keymap, highlightActiveLine, placeholder as cmPlaceholder } from '@codemirror/view';
+import { EditorState, Compartment } from '@codemirror/state';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { searchKeymap, highlightSelectionMatches, search, searchPanelOpen, closeSearchPanel } from '@codemirror/search';
+import { markdown } from '@codemirror/lang-markdown';
+import { HighlightStyle, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
+import { useTheme } from '../composables/useTheme';
+import { ACCENT } from '../constants/theme';
+import { formatJsonValue, parseStandaloneJson } from '../utils/jsonFormat';
 
 interface Props {
   modelValue: string;
@@ -62,72 +57,182 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>();
 
-const textareaRef = ref<HTMLTextAreaElement>();
-const localValue = ref(props.modelValue);
+const { isDark, themeMode } = useTheme();
+const isCyberpunk = computed(() => themeMode.value === 'cyberpunk');
+
+const editorHost = ref<HTMLDivElement>();
 const fontSize = ref(props.fontSize);
 const fontFamily = ref(props.fontFamily);
 const lineHeight = ref(props.lineHeight);
 const showSaveStatus = ref(false);
 let hideTimer: number | null = null;
+let view: EditorView | null = null;
+const appearance = new Compartment();
+const highlighting = new Compartment();
 
-// 监听保存状态变化
+const darkHighlight = HighlightStyle.define([
+  { tag: t.content, color: '#e5e7eb' },
+  { tag: t.heading, color: ACCENT.cyan, fontWeight: 'bold' },
+  { tag: t.strong, color: '#e5e7eb', fontWeight: 'bold' },
+  { tag: t.emphasis, fontStyle: 'italic', color: '#d1d5db' },
+  { tag: t.link, color: ACCENT.tealSoft },
+  { tag: t.url, color: ACCENT.cyan },
+  { tag: t.comment, color: '#94a3b8' },
+  { tag: t.keyword, color: '#86efac' },
+  { tag: t.string, color: '#fcd34d' },
+  { tag: t.monospace, color: '#cbd5e1' },
+  { tag: t.meta, color: '#94a3b8' },
+  { tag: t.processingInstruction, color: '#94a3b8' },
+]);
+
+function editorColors() {
+  if (isCyberpunk.value) {
+    return { text: '#d7dce2', muted: '#8b9cb3', caret: ACCENT.cyan };
+  }
+  if (isDark.value) {
+    return { text: '#e5e7eb', muted: '#9ca3af', caret: ACCENT.tealSoft };
+  }
+  return { text: '#1c1917', muted: '#78716c', caret: ACCENT.teal };
+}
+
+function buildHighlight() {
+  return isDark.value
+    ? syntaxHighlighting(darkHighlight, { fallback: true })
+    : syntaxHighlighting(defaultHighlightStyle, { fallback: true });
+}
+
+function buildAppearance() {
+  const colors = editorColors();
+  return EditorView.theme(
+    {
+      '&': {
+        height: '100%',
+        fontSize: `${fontSize.value}px`,
+        backgroundColor: 'transparent',
+        color: colors.text,
+      },
+      '.cm-scroller': {
+        fontFamily: `${fontFamily.value}, 'Microsoft YaHei', sans-serif`,
+        lineHeight: String(lineHeight.value),
+        overflow: 'auto',
+      },
+      '.cm-content': {
+        padding: '16px 12px',
+        caretColor: colors.caret,
+        color: colors.text,
+      },
+      '.cm-line': {
+        color: colors.text,
+      },
+      '.cm-cursor, .cm-dropCursor': {
+        borderLeftColor: colors.caret,
+      },
+      '.cm-gutters': {
+        backgroundColor: 'transparent',
+        border: 'none',
+        color: colors.muted,
+      },
+      '.cm-activeLine': {
+        backgroundColor: isDark.value ? 'rgba(13, 148, 136, 0.12)' : 'rgba(13, 148, 136, 0.08)',
+      },
+      '.cm-activeLineGutter': {
+        backgroundColor: 'transparent',
+        color: colors.text,
+      },
+      '&.cm-focused': {
+        outline: 'none',
+      },
+      '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+        backgroundColor: isDark.value
+          ? 'rgba(13, 148, 136, 0.38) !important'
+          : 'rgba(13, 148, 136, 0.28) !important',
+      },
+      '.cm-placeholder': {
+        color: colors.muted,
+      },
+      '.cm-panel': {
+        backgroundColor: isDark.value ? '#1f2937' : '#f5f5f4',
+        color: colors.text,
+      },
+      '.cm-panel input': {
+        backgroundColor: isDark.value ? '#111827' : '#ffffff',
+        color: colors.text,
+        border: `1px solid ${colors.muted}`,
+      },
+    },
+    { dark: isDark.value }
+  );
+}
+
+function getDoc(): string {
+  return view?.state.doc.toString() ?? '';
+}
+
+function syncFromProps(text: string) {
+  if (!view || getDoc() === text) return;
+  view.dispatch({
+    changes: {
+      from: 0,
+      to: view.state.doc.length,
+      insert: text,
+    },
+  });
+}
+
 watch(() => props.saveStatus, (newStatus) => {
   if (newStatus) {
     showSaveStatus.value = true;
-    
-    // 清除之前的定时器
     if (hideTimer) {
       clearTimeout(hideTimer);
       hideTimer = null;
     }
-    
-    // 只有成功状态才自动隐藏
     if (newStatus === 'saved') {
       hideTimer = window.setTimeout(() => {
         showSaveStatus.value = false;
         hideTimer = null;
-      }, 450);  // 450ms 后隐藏
+      }, 450);
     }
   } else {
     showSaveStatus.value = false;
   }
 });
 
-// 处理输入事件
-const handleInput = () => {
-  emit('update:modelValue', localValue.value);
-  emit('change', localValue.value);
-};
-
-// 监听外部值变化
 watch(() => props.modelValue, (newValue) => {
-  if (localValue.value !== newValue) {
-    localValue.value = newValue;
-  }
+  syncFromProps(newValue);
 });
 
-// 监听外部字体大小变化
 watch(() => props.fontSize, (newSize) => {
   if (fontSize.value !== newSize) {
     fontSize.value = newSize;
   }
 });
 
-// 监听外部字体族变化
 watch(() => props.fontFamily, (newFamily) => {
   if (fontFamily.value !== newFamily) {
     fontFamily.value = newFamily;
   }
 });
 
-// 监听外部行高变化
 watch(() => props.lineHeight, (newHeight) => {
   if (lineHeight.value !== newHeight) {
     lineHeight.value = newHeight;
   }
 });
 
-// 处理滚轮事件 (Ctrl + 滚轮调整字体大小)
+function reconfigureEditor() {
+  if (!view) return;
+  view.dispatch({
+    effects: [
+      appearance.reconfigure(buildAppearance()),
+      highlighting.reconfigure(buildHighlight()),
+    ],
+  });
+}
+
+watch([fontSize, fontFamily, lineHeight, isDark, themeMode], () => {
+  reconfigureEditor();
+});
+
 const handleWheel = (e: WheelEvent) => {
   if (e.ctrlKey) {
     e.preventDefault();
@@ -140,65 +245,140 @@ const handleWheel = (e: WheelEvent) => {
   }
 };
 
-// 获取当前值
-const getValue = () => {
-  return localValue.value;
-};
+const getValue = () => getDoc();
 
-// 设置值
 const setValue = (value: string) => {
-  localValue.value = value;
+  syncFromProps(value);
   emit('update:modelValue', value);
 };
 
-// 插入内容
 const insertValue = (value: string) => {
-  if (textareaRef.value) {
-    const start = textareaRef.value.selectionStart;
-    const end = textareaRef.value.selectionEnd;
-    const text = localValue.value;
-    localValue.value = text.substring(0, start) + value + text.substring(end);
-    emit('update:modelValue', localValue.value);
-    
-    // 设置光标位置
-    setTimeout(() => {
-      if (textareaRef.value) {
-        const newPos = start + value.length;
-        textareaRef.value.selectionStart = newPos;
-        textareaRef.value.selectionEnd = newPos;
-        textareaRef.value.focus();
-      }
-    }, 0);
-  }
+  if (!view) return;
+  const { from, to } = view.state.selection.main;
+  view.dispatch({
+    changes: { from, to, insert: value },
+    selection: { anchor: from + value.length },
+  });
+  emit('update:modelValue', getDoc());
 };
 
-// 聚焦编辑器
 const focus = () => {
-  textareaRef.value?.focus();
+  view?.focus();
 };
 
-// 获取选中内容
 const getSelection = () => {
-  if (textareaRef.value) {
-    const start = textareaRef.value.selectionStart;
-    const end = textareaRef.value.selectionEnd;
-    return localValue.value.substring(start, end);
-  }
-  return '';
+  if (!view) return '';
+  const { from, to } = view.state.selection.main;
+  return view.state.sliceDoc(from, to);
 };
 
-// 导出方法
+/** 查找面板是否打开，供主窗 Esc 判断 */
+const isSearchOpen = () => {
+  if (!view) return false;
+  return searchPanelOpen(view.state) || !!view.dom.querySelector('.cm-panel');
+};
+
+const closeSearch = () => {
+  if (!view) return false;
+  return closeSearchPanel(view);
+};
+
+function formatPastedJson(editor: EditorView) {
+  const text = editor.state.doc.toString();
+  const parsed = parseStandaloneJson(text);
+  if (!parsed) return;
+  const formatted = formatJsonValue(parsed);
+  if (formatted === text.trim() && text.trim() === text) return;
+  editor.dispatch({
+    changes: { from: 0, to: editor.state.doc.length, insert: formatted },
+    userEvent: 'input.format.json',
+  });
+}
+
 defineExpose({
   getValue,
   setValue,
   insertValue,
   focus,
-  getSelection
+  getSelection,
+  isSearchOpen,
+  closeSearch,
 });
 
 onMounted(() => {
-  localValue.value = props.modelValue;
   fontSize.value = props.fontSize;
+  if (!editorHost.value) return;
+
+  view = new EditorView({
+    parent: editorHost.value,
+    state: EditorState.create({
+      doc: props.modelValue,
+      extensions: [
+        highlightActiveLine(),
+        highlightSelectionMatches(),
+        history(),
+        markdown(),
+        highlighting.of(buildHighlight()),
+        search(),
+        EditorView.lineWrapping,
+        cmPlaceholder(props.placeholder),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+        appearance.of(buildAppearance()),
+        EditorView.domEventHandlers({
+          paste(event, editor) {
+            const clipboard = event.clipboardData?.getData('text/plain') ?? '';
+            if (!clipboard.trim()) return false;
+            const { from, to } = editor.state.selection.main;
+            const leftover =
+              editor.state.sliceDoc(0, from) +
+              editor.state.sliceDoc(to, editor.state.doc.length);
+            if (leftover.trim() !== '') return false;
+            const parsed = parseStandaloneJson(clipboard);
+            if (!parsed) return false;
+            event.preventDefault();
+            editor.dispatch({
+              changes: {
+                from: 0,
+                to: editor.state.doc.length,
+                insert: formatJsonValue(parsed),
+              },
+              userEvent: 'input.paste',
+            });
+            return true;
+          },
+        }),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            const value = update.state.doc.toString();
+            emit('update:modelValue', value);
+            emit('change', value);
+          }
+          const isFormat = update.transactions.some((tr) =>
+            tr.isUserEvent('input.format.json')
+          );
+          if (isFormat) return;
+          const pasted = update.transactions.some((tr) => tr.isUserEvent('input.paste'));
+          let replacedWholeDoc = false;
+          update.changes.iterChanges((fromA, toA) => {
+            if (fromA === 0 && toA === update.startState.doc.length) {
+              replacedWholeDoc = true;
+            }
+          });
+          if (pasted || replacedWholeDoc) {
+            queueMicrotask(() => formatPastedJson(update.view));
+          }
+        }),
+      ],
+    }),
+  });
+});
+
+onUnmounted(() => {
+  view?.destroy();
+  view = null;
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+  }
 });
 </script>
 
@@ -209,9 +389,12 @@ onMounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--n-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--n-color, transparent);
 }
 
-/* 保存状态指示器 */
 .save-status-indicator {
   position: absolute;
   top: 1rem;
@@ -223,7 +406,6 @@ onMounted(() => {
   pointer-events: none;
 }
 
-/* 淡入淡出动画 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;
@@ -234,60 +416,32 @@ onMounted(() => {
   opacity: 0;
 }
 
-.text-editor {
-  width: 100%;
+.cm-host {
   height: 100%;
-  padding: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  /* font-size is now controlled by inline style */
-  line-height: 1.6;
-  resize: none;
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  min-height: 0;
 }
 
-.text-editor:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.1);
+.cm-host :deep(.cm-editor) {
+  height: 100%;
 }
 
-.text-editor::placeholder {
-  color: var(--color-text-muted);
-  opacity: 0.6;
+.text-editor-container.is-dark :deep(.cm-content),
+.text-editor-container.is-dark :deep(.cm-line) {
+  color: #e5e7eb;
 }
 
-/* 滚动条样式 */
-.text-editor::-webkit-scrollbar {
+.cm-host :deep(.cm-scroller)::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.text-editor::-webkit-scrollbar-track {
-  background: var(--color-surface-2);
+.cm-host :deep(.cm-scroller)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cm-host :deep(.cm-scroller)::-webkit-scrollbar-thumb {
+  background: var(--n-scrollbar-color);
   border-radius: 4px;
-}
-
-.text-editor::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.text-editor::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .text-editor {
-    padding: 12px;
-    /* font-size is now controlled by inline style */
-  }
 }
 </style>
-

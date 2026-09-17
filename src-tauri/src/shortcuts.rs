@@ -2,16 +2,102 @@
 //! 
 //! 提供快捷键字符串解析和全局快捷键注册功能
 
+use std::sync::{Mutex, OnceLock};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tauri_plugin_store::StoreExt;
+
+const DEFAULT_MAIN: &str = "Alt+Space";
+const DEFAULT_SEARCH: &str = "Ctrl+Space";
+
+struct ShortcutBindings {
+    main: Shortcut,
+    search: Shortcut,
+}
+
+fn bindings() -> &'static Mutex<ShortcutBindings> {
+    static CURRENT: OnceLock<Mutex<ShortcutBindings>> = OnceLock::new();
+    CURRENT.get_or_init(|| {
+        Mutex::new(ShortcutBindings {
+            main: parse_shortcut(DEFAULT_MAIN).expect("默认主窗快捷键"),
+            search: parse_shortcut(DEFAULT_SEARCH).expect("默认搜索窗快捷键"),
+        })
+    })
+}
+
+/// 写入当前快捷键绑定，供全局 handler 比对
+pub fn set_current_bindings(main: Shortcut, search: Shortcut) {
+    if let Ok(mut guard) = bindings().lock() {
+        guard.main = main;
+        guard.search = search;
+    }
+}
+
+/// 读取当前快捷键绑定
+pub fn current_bindings() -> (Shortcut, Shortcut) {
+    match bindings().lock() {
+        Ok(guard) => (guard.main, guard.search),
+        Err(_) => (
+            parse_shortcut(DEFAULT_MAIN).expect("默认主窗快捷键"),
+            parse_shortcut(DEFAULT_SEARCH).expect("默认搜索窗快捷键"),
+        ),
+    }
+}
+
+/// 从 plugin-store 读取已保存的快捷键字符串
+pub fn load_shortcut_strings(app: &tauri::AppHandle) -> (String, String) {
+    let fallback = (DEFAULT_MAIN.to_string(), DEFAULT_SEARCH.to_string());
+    let Ok(store) = app.store("config.json") else {
+        return fallback;
+    };
+    match store.get("shortcuts") {
+        Some(value) => {
+            let main = value
+                .get("showMainWindow")
+                .and_then(|v| v.as_str())
+                .unwrap_or(DEFAULT_MAIN)
+                .to_string();
+            let search = value
+                .get("showSearchWindow")
+                .and_then(|v| v.as_str())
+                .unwrap_or(DEFAULT_SEARCH)
+                .to_string();
+            (main, search)
+        }
+        None => fallback,
+    }
+}
+
+/// 应用并注册全局快捷键
+pub fn apply_global_shortcuts(
+    app_handle: &tauri::AppHandle,
+    show_main: &str,
+    show_search: &str,
+) -> Result<(), String> {
+    let new_main_shortcut = parse_shortcut(show_main)?;
+    let new_search_shortcut = parse_shortcut(show_search)?;
+
+    set_current_bindings(new_main_shortcut, new_search_shortcut);
+
+    let _ = app_handle.global_shortcut().unregister_all();
+    app_handle
+        .global_shortcut()
+        .register(new_main_shortcut)
+        .map_err(|e| format!("注册主窗口快捷键失败: {}", e))?;
+    app_handle
+        .global_shortcut()
+        .register(new_search_shortcut)
+        .map_err(|e| format!("注册搜索窗口快捷键失败: {}", e))?;
+    Ok(())
+}
 
 /// 解析快捷键字符串为 Shortcut 对象
 /// 输入格式: "Ctrl+Alt+D", "Alt+Space" 等
 pub fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
-    let parts: Vec<&str> = shortcut_str.split('+').map(|s| s.trim()).collect();
-
-    if parts.is_empty() {
+    if shortcut_str.trim().is_empty() {
         return Err("快捷键字符串不能为空".to_string());
     }
+
+    let parts: Vec<&str> = shortcut_str.split('+').map(|s| s.trim()).collect();
 
     let mut modifiers = Modifiers::empty();
     let mut main_key: Option<Code> = None;
@@ -111,25 +197,7 @@ pub fn update_global_shortcuts(
     show_main: String,
     show_search: String,
 ) -> Result<(), String> {
-    // 解析新的快捷键
-    let new_main_shortcut = parse_shortcut(&show_main)?;
-    let new_search_shortcut = parse_shortcut(&show_search)?;
-
-    // 注销所有现有快捷键（简化处理：注销所有，然后重新注册）
-    let _ = app_handle.global_shortcut().unregister_all();
-
-    // 注册新的快捷键
-    app_handle
-        .global_shortcut()
-        .register(new_main_shortcut.clone())
-        .map_err(|e| format!("注册主窗口快捷键失败: {}", e))?;
-
-    app_handle
-        .global_shortcut()
-        .register(new_search_shortcut.clone())
-        .map_err(|e| format!("注册搜索窗口快捷键失败: {}", e))?;
-
-    Ok(())
+    apply_global_shortcuts(&app_handle, &show_main, &show_search)
 }
 
 #[cfg(test)]

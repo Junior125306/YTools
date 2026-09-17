@@ -1,6 +1,7 @@
 import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
 import { darkTheme } from 'naive-ui'
 import type { GlobalTheme, GlobalThemeOverrides } from 'naive-ui'
+import { ACCENT } from '../constants/theme'
 import { getTheme, setTheme } from '../utils/configStore'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -34,10 +35,10 @@ const effectiveTheme = computed<GlobalTheme | null>(() => {
 // 亮色主题覆盖配置
 const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
-    primaryColor: '#a78bfa',
-    primaryColorHover: '#8b5cf6',
-    primaryColorPressed: '#7c3aed',
-    primaryColorSuppl: '#c4b5fd',
+    primaryColor: ACCENT.teal,
+    primaryColorHover: ACCENT.tealHover,
+    primaryColorPressed: ACCENT.tealPressed,
+    primaryColorSuppl: ACCENT.tealSoft,
     borderRadius: '8px',
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
     // 亮色主题的柔和背景色
@@ -55,10 +56,10 @@ const lightThemeOverrides: GlobalThemeOverrides = {
 // 暗色主题覆盖配置
 const darkThemeOverrides: GlobalThemeOverrides = {
   common: {
-    primaryColor: '#a78bfa',
-    primaryColorHover: '#8b5cf6',
-    primaryColorPressed: '#7c3aed',
-    primaryColorSuppl: '#c4b5fd',
+    primaryColor: ACCENT.teal,
+    primaryColorHover: ACCENT.tealHover,
+    primaryColorPressed: ACCENT.tealPressed,
+    primaryColorSuppl: ACCENT.tealSoft,
     borderRadius: '8px',
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif"
     // 暗色主题使用 Naive UI 默认的暗色背景
@@ -279,8 +280,7 @@ const initTheme = async () => {
           themeMode.value = savedTheme as ThemeMode
         }
         isThemeLoaded.value = true
-      } catch (error) {
-        console.error('加载主题配置失败:', error)
+      } catch {
         isThemeLoaded.value = true
       }
     })()
@@ -299,8 +299,8 @@ export function useTheme() {
   // 监听主题变化并持久化
   watchEffect(() => {
     if (isThemeLoaded.value) {
-      setTheme(themeMode.value).catch((error) => {
-        console.error('保存主题配置失败:', error)
+      setTheme(themeMode.value).catch(() => {
+        // 主题持久化失败时保持当前内存状态
       })
     }
   })
@@ -310,11 +310,10 @@ export function useTheme() {
     try {
       const currentWindowInstance = getCurrentWindow()
       unlistenThemeChange = await currentWindowInstance.listen<ThemeMode>('theme-changed', (event) => {
-        console.log('[useTheme] 收到主题变更事件:', event.payload)
         themeMode.value = event.payload
       })
-    } catch (error) {
-      console.error('监听主题变更事件失败:', error)
+    } catch {
+      // 跨窗口监听不可用时忽略
     }
   })
 
@@ -336,12 +335,12 @@ export function useTheme() {
       for (const win of allWindows) {
         try {
           await win.emit('theme-changed', mode)
-        } catch (error) {
-          console.error(`通知窗口 ${win.label} 失败:`, error)
+        } catch {
+          // 单个窗口通知失败不影响其他窗口
         }
       }
-    } catch (error) {
-      console.error('广播主题变更失败:', error)
+    } catch {
+      // 广播失败时当前窗口主题已生效
     }
   }
 

@@ -62,14 +62,12 @@ export async function initConfig(): Promise<void> {
     // 如果 defaultNotesLocation 为空，则设置为 .ytools 目录
     const defaultLocation = await storeInstance.get('defaultNotesLocation');
     if (!defaultLocation) {
-      const { appConfigDir } = await import('@tauri-apps/api/path');
-      const { join } = await import('@tauri-apps/api/path');
-      const homeDir = await appConfigDir();
-      await storeInstance.set('defaultNotesLocation', await join(homeDir, '.ytools'));
+      const { homeDir, join } = await import('@tauri-apps/api/path');
+      await storeInstance.set('defaultNotesLocation', await join(await homeDir(), '.ytools'));
       await storeInstance.save();
     }
-  } catch (error) {
-    console.error('Failed to initialize config store:', error);
+  } catch {
+    // 初始化失败时沿用默认配置
   }
 }
 
@@ -100,14 +98,14 @@ async function migrateOldConfig(): Promise<void> {
         await storeInstance.set('fontSize', oldConfig.font_size);
       }
 
-      console.log('✓ Old config migrated successfully');
+      // 字体字段已迁移
     }
 
     // 标记为已迁移
     await storeInstance.set('_migrated', true);
     await storeInstance.save();
-  } catch (error) {
-    console.warn('Old config migration skipped:', error);
+  } catch {
+    // 无旧配置时跳过迁移
   }
 }
 
