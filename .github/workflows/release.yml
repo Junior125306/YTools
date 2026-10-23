@@ -34,7 +34,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 8
+          version: 9
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -49,14 +49,14 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Extract release notes from CHANGELOG
         id: extract_notes
         shell: bash
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
           # 从 CHANGELOG.md 提取当前版本的发布说明
           NOTES=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | \
@@ -64,21 +64,21 @@ jobs:
             sed '/## \[/,$d' | \
             sed '/^$/N;/^\n$/D')
 
-          # 如果提取失败，使用默认说明
           if [ -z "$NOTES" ]; then
             NOTES="Release $VERSION"
           fi
 
-          # 保存到文件用于 tauri-action
-          echo "$NOTES" > release_notes.md
+          NOTES="${NOTES}
 
-      - name: Append footer to release notes
-        shell: bash
-        run: |
-          echo "" >> release_notes.md
-          echo "---" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "查看完整变更日志: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)" >> release_notes.md
+---
+
+查看完整变更日志: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)"
+
+          {
+            echo "NOTES<<RELEASE_NOTES_EOF"
+            echo "$NOTES"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and upload to Release
         uses: tauri-apps/tauri-action@v0
@@ -87,7 +87,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "v${{ steps.extract_notes.outputs.VERSION }}"
-          releaseBodyPath: release_notes.md
+          releaseBody: ${{ steps.extract_notes.outputs.NOTES }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
