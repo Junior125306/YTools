@@ -3,15 +3,16 @@ import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { 
-  NCard, NInput, NList, NListItem, NEmpty, NSpace, NTag, NIcon, NText, useThemeVars
+  NCard, NInput, NList, NListItem, NEmpty, NSpace, NTag, NIcon, NText, useThemeVars, useMessage
 } from 'naive-ui'
 import { SearchOutline, FolderOutline } from '@vicons/ionicons5'
-import { getSearchDirectories } from '../utils/configStore'
+import { getLaunchers, getSearchDirectories, type LauncherConfig } from '../utils/configStore'
 import { useTheme } from '../composables/useTheme'
 import { ACCENT } from '../constants/theme'
 import type { WorkspaceHit } from '../types/workspace'
 
 const themeVars = useThemeVars()
+const message = useMessage()
 // 初始化主题并监听主题变更
 const { themeMode } = useTheme()
 
@@ -32,6 +33,7 @@ const currentWindow = getCurrentWindow()
 const isOpening = ref(false)
 const hasSearchDirectories = ref(true)
 const resultRefs = ref<HTMLElement[]>([])
+const launchers = ref<LauncherConfig[]>([])
 
 // 搜索函数
 async function performSearch(searchQuery: string) {
@@ -56,6 +58,60 @@ async function performSearch(searchQuery: string) {
   } catch {
     searchResults.value = []
     resultRefs.value = []
+  }
+}
+
+async function loadLaunchers() {
+  try {
+    launchers.value = await getLaunchers()
+  } catch {
+    launchers.value = []
+  }
+}
+
+function errorText(err: unknown, fallback: string) {
+  if (typeof err === 'string' && err.trim()) return err
+  if (err instanceof Error && err.message.trim()) return err.message
+  return fallback
+}
+
+// 用启动项打开当前选中的文件夹
+async function openWithLauncher(index: number) {
+  const launcher = launchers.value[index]
+  const hit = searchResults.value[selectedIndex.value]
+  if (!launcher || !hit || isOpening.value) return
+  isOpening.value = true
+  try {
+    await invoke('open_with_launcher', {
+      exePath: launcher.exePath,
+      folderPath: hit.path
+    })
+    await currentWindow.hide().catch(() => {})
+    query.value = ''
+    searchResults.value = []
+  } catch (err) {
+    message.error(errorText(err, '启动失败'))
+  } finally {
+    setTimeout(() => {
+      isOpening.value = false
+    }, 50)
+  }
+}
+
+function launcherSlot(event: KeyboardEvent): number | null {
+  if (!event.altKey || event.ctrlKey || event.shiftKey || event.metaKey || event.repeat) return null
+  switch (event.code) {
+    case 'Digit1':
+    case 'Numpad1':
+      return 0
+    case 'Digit2':
+    case 'Numpad2':
+      return 1
+    case 'Digit3':
+    case 'Numpad3':
+      return 2
+    default:
+      return null
   }
 }
 
@@ -85,6 +141,13 @@ function handleInput() {
 
 // 处理键盘事件
 async function handleKeydown(e: KeyboardEvent) {
+  const slot = launcherSlot(e)
+  if (slot !== null) {
+    e.preventDefault()
+    e.stopPropagation()
+    await openWithLauncher(slot)
+    return
+  }
   if (e.key === 'Escape') {
     e.preventDefault()
     await currentWindow.hide()
@@ -152,7 +215,7 @@ async function handleBackgroundClick(e: MouseEvent) {
 
 // 初始化
 onMounted(async () => {
-  await performSearch('')
+  await Promise.all([performSearch(''), loadLaunchers()])
   
   // 自动聚焦到搜索输入框
   await nextTick()
@@ -164,7 +227,7 @@ onMounted(async () => {
   
   currentWindow.listen('tauri://focus', async () => {
     query.value = ''
-    await performSearch('')
+    await Promise.all([performSearch(''), loadLaunchers()])
     // 窗口获得焦点时也自动聚焦输入框
     await nextTick()
     if (searchInput.value) {
@@ -236,25 +299,41 @@ onUnmounted(() => {
       </div>
       
       <template #footer>
-        <NSpace justify="center" size="large">
-          <NTag type="info" size="small" :bordered="false">
-            <template #icon>
-              <span style="font-family: monospace">↑↓</span>
-            </template>
-            导航
-          </NTag>
-          <NTag type="success" size="small" :bordered="false">
-            <template #icon>
-              <span style="font-family: monospace">Enter</span>
-            </template>
-            打开
-          </NTag>
-          <NTag type="warning" size="small" :bordered="false">
-            <template #icon>
-              <span style="font-family: monospace">Esc</span>
-            </template>
-            关闭
-          </NTag>
+        <NSpace vertical align="center" :size="8" style="width: 100%">
+          <NSpace justify="center" size="large">
+            <NTag type="info" size="small" :bordered="false">
+              <template #icon>
+                <span style="font-family: monospace">↑↓</span>
+              </template>
+              导航
+            </NTag>
+            <NTag type="success" size="small" :bordered="false">
+              <template #icon>
+                <span style="font-family: monospace">Enter</span>
+              </template>
+              打开
+            </NTag>
+            <NTag type="warning" size="small" :bordered="false">
+              <template #icon>
+                <span style="font-family: monospace">Esc</span>
+              </template>
+              关闭
+            </NTag>
+          </NSpace>
+          <NSpace v-if="launchers.length > 0" justify="center" size="small">
+            <NTag
+              v-for="(launcher, index) in launchers"
+              :key="launcher.exePath"
+              size="small"
+              :bordered="false"
+            >
+              <span class="launcher-hint" :title="`Alt+${index + 1} 用 ${launcher.name} 打开`">
+                <img v-if="launcher.icon" :src="launcher.icon" alt="" />
+                <span class="launcher-key">Alt+{{ index + 1 }}</span>
+                <span class="launcher-name">{{ launcher.name }}</span>
+              </span>
+            </NTag>
+          </NSpace>
         </NSpace>
       </template>
     </NCard>
@@ -330,6 +409,31 @@ onUnmounted(() => {
 .result-path {
   font-size: 12px;
   line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launcher-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 180px;
+}
+
+.launcher-hint img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.launcher-key {
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.launcher-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -1,5 +1,5 @@
 //! 系统集成模块
-//! 
+//!
 //! 提供系统托盘、窗口管理、目录打开等系统级功能
 
 use crate::shortcuts;
@@ -100,20 +100,26 @@ fn schedule_hide_if_lost_os_focus(window: WebviewWindow) {
     });
 }
 
-fn has_parent_dir(path: &Path) -> bool {
+pub(crate) fn has_parent_dir(path: &Path) -> bool {
     path.components().any(|c| matches!(c, Component::ParentDir))
 }
 
-/// 打开文件夹（使用系统文件管理器）
-#[tauri::command]
-pub fn open_directory(path: String) -> Result<(), String> {
-    let dir = Path::new(&path);
+/// 目录必须存在，且路径里不能带 `..`
+pub(crate) fn validate_existing_directory(path: &str) -> Result<(), String> {
+    let dir = Path::new(path);
     if has_parent_dir(dir) {
         return Err("不允许的目录路径".to_string());
     }
     if !dir.exists() {
         return Err(format!("目录不存在: {}", path));
     }
+    Ok(())
+}
+
+/// 打开文件夹（使用系统文件管理器）
+#[tauri::command]
+pub fn open_directory(path: String) -> Result<(), String> {
+    validate_existing_directory(&path)?;
 
     #[cfg(target_os = "windows")]
     {
@@ -363,3 +369,29 @@ pub fn setup_windows_and_shortcuts(
     Ok(main_focused)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::validate_existing_directory;
+
+    #[test]
+    fn reject_parent_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let sneaky = dir.path().join("..").join("still-missing");
+        let err = validate_existing_directory(&sneaky.to_string_lossy()).unwrap_err();
+        assert!(err.contains("不允许"));
+    }
+
+    #[test]
+    fn reject_missing_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing-dir");
+        let err = validate_existing_directory(&missing.to_string_lossy()).unwrap_err();
+        assert!(err.contains("不存在"));
+    }
+
+    #[test]
+    fn accept_existing_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(validate_existing_directory(&dir.path().to_string_lossy()).is_ok());
+    }
+}

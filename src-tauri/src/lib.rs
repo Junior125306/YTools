@@ -5,12 +5,15 @@
 //! - search: 搜索算法和工作区搜索
 //! - shortcuts: 快捷键解析和管理
 //! - system: 系统集成（托盘、窗口、目录打开）
+//! - launcher: 用指定程序打开工作区目录
 
+mod launcher;
 mod notes;
 mod search;
 mod shortcuts;
 mod system;
 
+pub use launcher::{inspect_launcher, open_with_launcher};
 pub use notes::{create_note, import_note, read_note, save_note};
 pub use search::search_workspaces;
 pub use shortcuts::update_global_shortcuts;
@@ -34,6 +37,8 @@ pub fn run() {
             import_note,
             create_note,
             open_directory,
+            inspect_launcher,
+            open_with_launcher,
             update_global_shortcuts
         ])
         .setup(|app| {

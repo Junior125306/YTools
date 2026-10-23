@@ -5249,10 +5249,11 @@ dependencies = [
 
 [[package]]
 name = "ytools"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "dirs 5.0.1",
  "pinyin",
+ "png 0.17.16",
  "serde",
  "serde_json",
  "tauri",

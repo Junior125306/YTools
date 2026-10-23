@@ -6,6 +6,14 @@ export interface ShortcutsConfig {
   showSearchWindow: string;  // 显示/隐藏搜索窗口
 }
 
+/** 搜索窗口的全局启动项。列表顺序对应 Alt+1 / Alt+2 / Alt+3 */
+export interface LauncherConfig {
+  name: string;
+  exePath: string;
+  /** PNG data URL，读取失败时为空字符串 */
+  icon: string;
+}
+
 // 配置接口
 export interface AppConfig {
   fontSize: number;
@@ -17,6 +25,7 @@ export interface AppConfig {
   notes: string[]; // 所有笔记的完整路径列表
   theme: 'light' | 'dark' | 'cyberpunk' | 'system'; // 主题模式
   shortcuts: ShortcutsConfig; // 快捷键配置
+  launchers: LauncherConfig[]; // 搜索窗口的启动程序，最多 3 个
 }
 
 // 默认快捷键配置
@@ -35,7 +44,8 @@ const DEFAULT_CONFIG: AppConfig = {
   defaultNotesLocation: '', // 将在初始化时设置为 .ytools 目录
   notes: [],
   theme: 'system', // 默认跟随系统主题
-  shortcuts: DEFAULT_SHORTCUTS
+  shortcuts: DEFAULT_SHORTCUTS,
+  launchers: []
 };
 
 // 创建 store 实例（使用 Store.load 加载）
@@ -135,7 +145,8 @@ export async function getConfig(): Promise<AppConfig> {
     defaultNotesLocation,
     notes,
     theme,
-    shortcuts
+    shortcuts,
+    launchers
   ] = await Promise.all([
     getFontSize(),
     getFontFamily(),
@@ -145,7 +156,8 @@ export async function getConfig(): Promise<AppConfig> {
     getDefaultNotesLocation(),
     getNotes(),
     getTheme(),
-    getShortcuts()
+    getShortcuts(),
+    getLaunchers()
   ]);
 
   return {
@@ -157,7 +169,8 @@ export async function getConfig(): Promise<AppConfig> {
     defaultNotesLocation,
     notes,
     theme: theme as 'light' | 'dark' | 'cyberpunk' | 'system',
-    shortcuts
+    shortcuts,
+    launchers
   };
 }
 
@@ -175,6 +188,7 @@ export async function resetConfig(): Promise<void> {
   await storeInstance.set('notes', DEFAULT_CONFIG.notes);
   await storeInstance.set('theme', DEFAULT_CONFIG.theme);
   await storeInstance.set('shortcuts', DEFAULT_CONFIG.shortcuts);
+  await storeInstance.set('launchers', DEFAULT_CONFIG.launchers);
   await storeInstance.set('_migrated', true); // 保持迁移标记
   await storeInstance.save();
 }
@@ -239,6 +253,50 @@ export async function getSearchDirectories(): Promise<string[]> {
 export async function setSearchDirectories(directories: string[]): Promise<void> {
   const storeInstance = await getStore();
   await storeInstance.set('searchDirectories', directories);
+}
+
+function exeStem(path: string): string {
+  const file = path.split(/[/\\]/).pop() || path;
+  return file.replace(/\.exe$/i, '') || file;
+}
+
+function launcherPathKey(path: string): string {
+  return path.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+}
+
+function normalizeLaunchers(value: unknown): LauncherConfig[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: LauncherConfig[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Partial<LauncherConfig>;
+    if (typeof record.exePath !== 'string' || !record.exePath.trim()) continue;
+    const key = launcherPathKey(record.exePath);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const name = typeof record.name === 'string' ? record.name.trim() : '';
+    result.push({
+      name: name || exeStem(record.exePath),
+      exePath: record.exePath,
+      icon: typeof record.icon === 'string' ? record.icon : ''
+    });
+    if (result.length >= 3) break;
+  }
+  return result;
+}
+
+// 获取启动项
+export async function getLaunchers(): Promise<LauncherConfig[]> {
+  const storeInstance = await getStore();
+  const launchers = await storeInstance.get<LauncherConfig[]>('launchers');
+  return normalizeLaunchers(launchers);
+}
+
+// 设置启动项，最多保留 3 个
+export async function setLaunchers(launchers: LauncherConfig[]): Promise<void> {
+  const storeInstance = await getStore();
+  await storeInstance.set('launchers', normalizeLaunchers(launchers));
 }
 
 // 添加搜索目录

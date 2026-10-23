@@ -6,9 +6,9 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { enable as enableAutostart, disable as disableAutostart } from '@tauri-apps/plugin-autostart'
 import { homeDir } from '@tauri-apps/api/path'
 import {
-  NForm, NFormItem,
+  NForm, NFormItem, NInput,
   NSwitch, NInputNumber, NSelect, NList, NListItem,
-  NButton, NSpace, NIcon, NText, NDivider, useThemeVars, useMessage
+  NButton, NSpace, NIcon, NText, NTag, NDivider, useThemeVars, useMessage
 } from 'naive-ui'
 import { AddOutline, TrashOutline, CloseOutline, SettingsOutline, RefreshOutline } from '@vicons/ionicons5'
 import { useTheme } from '../composables/useTheme'
@@ -29,8 +29,10 @@ import {
   setTheme,
   resetConfig,
   setShortcuts,
+  setLaunchers,
   DEFAULT_SHORTCUTS,
   type AppConfig,
+  type LauncherConfig,
   type ShortcutsConfig
 } from '../utils/configStore'
 
@@ -91,11 +93,13 @@ const localConfig = ref<AppConfig>({
   shortcuts: {
     showMainWindow: 'Alt+Space',
     showSearchWindow: 'Ctrl+Space'
-  }
+  },
+  launchers: []
 })
 
 // 加载状态
 const isLoading = ref(true)
+const isAddingLauncher = ref(false)
 
 // 计算显示的路径（实际路径或提示文本）
 const displayPath = computed(() => {
@@ -136,7 +140,8 @@ const loadSettings = async () => {
     const config = await getConfig()
     localConfig.value = { 
       ...config,
-      searchDirectories: Array.isArray(config.searchDirectories) ? config.searchDirectories : []
+      searchDirectories: Array.isArray(config.searchDirectories) ? config.searchDirectories : [],
+      launchers: Array.isArray(config.launchers) ? config.launchers : []
     }
   } catch {
     message.error('加载设置失败')
@@ -170,6 +175,62 @@ const addDirectory = async () => {
 // 删除搜索目录
 const removeDirectory = (index: number) => {
   localConfig.value.searchDirectories.splice(index, 1)
+}
+
+const launcherPathKey = (path: string) => path.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+
+const errorText = (err: unknown, fallback: string) => {
+  if (typeof err === 'string' && err.trim()) return err
+  if (err instanceof Error && err.message.trim()) return err.message
+  return fallback
+}
+
+// 选择 exe，并读取名称、路径和图标
+const addLauncher = async () => {
+  if (isAddingLauncher.value || localConfig.value.launchers.length >= 3) return
+  isAddingLauncher.value = true
+  try {
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      title: '选择启动程序',
+      filters: [{ name: '应用程序', extensions: ['exe'] }]
+    })
+    if (!selected || typeof selected !== 'string') return
+    const exists = localConfig.value.launchers.some(
+      (item) => launcherPathKey(item.exePath) === launcherPathKey(selected)
+    )
+    if (exists) {
+      message.warning('该程序已添加')
+      return
+    }
+    const info = await invoke<LauncherConfig>('inspect_launcher', { path: selected })
+    localConfig.value.launchers.push({
+      name: info.name,
+      exePath: info.exePath,
+      icon: info.icon || ''
+    })
+    if (!info.icon) {
+      message.warning('已添加，但没有读取到图标')
+    }
+  } catch (err) {
+    message.error(errorText(err, '读取程序信息失败'))
+  } finally {
+    isAddingLauncher.value = false
+  }
+}
+
+const moveLauncher = (index: number, delta: number) => {
+  const list = localConfig.value.launchers
+  const target = index + delta
+  if (target < 0 || target >= list.length) return
+  const current = list[index]
+  list[index] = list[target]
+  list[target] = current
+}
+
+const removeLauncher = (index: number) => {
+  localConfig.value.launchers.splice(index, 1)
 }
 
 // 选择笔记位置
@@ -208,6 +269,13 @@ const handleSave = async () => {
     await setLineHeight(localConfig.value.lineHeight)
     await setAutoStart(localConfig.value.autoStart)
     await setSearchDirectories(localConfig.value.searchDirectories)
+    localConfig.value.launchers = localConfig.value.launchers.map((item) => {
+      const trimmed = item.name.trim()
+      if (trimmed) return { ...item, name: trimmed }
+      const file = item.exePath.split(/[/\\]/).pop() || item.exePath
+      return { ...item, name: file.replace(/\.exe$/i, '') || file }
+    })
+    await setLaunchers(localConfig.value.launchers)
     await setDefaultNotesLocation(localConfig.value.defaultNotesLocation)
     await setTheme(localConfig.value.theme)
 
@@ -538,6 +606,68 @@ onUnmounted(() => {
           </NSpace>
         </NFormItem>
 
+        <!-- 启动项 -->
+        <NDivider title-placement="left" :class="{ 'cyberpunk-divider': isCyberpunk }">启动项</NDivider>
+        <div class="launcher-section">
+          <NText depth="3" class="launcher-help">
+            最多 3 个。搜索窗口选中文件夹后，按 Alt+1、Alt+2、Alt+3 用对应程序打开。
+          </NText>
+          <div
+            v-for="(launcher, index) in localConfig.launchers"
+            :key="launcher.exePath"
+            class="launcher-card"
+          >
+            <div class="launcher-card-top">
+              <img v-if="launcher.icon" :src="launcher.icon" alt="" class="launcher-icon" />
+              <span v-else class="launcher-icon launcher-icon-empty" />
+              <NInput
+                v-model:value="launcher.name"
+                size="small"
+                placeholder="显示名称"
+                class="launcher-name-input"
+              />
+              <NTag size="small" :bordered="false">Alt+{{ index + 1 }}</NTag>
+            </div>
+            <NText depth="3" class="launcher-path" :title="launcher.exePath">{{ launcher.exePath }}</NText>
+            <div class="launcher-actions">
+              <NButton
+                text
+                size="small"
+                :disabled="index === 0"
+                @click="moveLauncher(index, -1)"
+              >
+                上移
+              </NButton>
+              <NButton
+                text
+                size="small"
+                :disabled="index === localConfig.launchers.length - 1"
+                @click="moveLauncher(index, 1)"
+              >
+                下移
+              </NButton>
+              <NButton text size="small" type="error" @click="removeLauncher(index)">
+                删除
+              </NButton>
+            </div>
+          </div>
+          <NText v-if="localConfig.launchers.length === 0" depth="3" class="launcher-empty">
+            尚未添加启动项
+          </NText>
+          <NButton
+            dashed
+            block
+            :disabled="localConfig.launchers.length >= 3"
+            :loading="isAddingLauncher"
+            @click="addLauncher"
+          >
+            <template #icon>
+              <NIcon><AddOutline /></NIcon>
+            </template>
+            添加程序
+          </NButton>
+        </div>
+
         <!-- 笔记设置 -->
         <NDivider title-placement="left" :class="{ 'cyberpunk-divider': isCyberpunk }">笔记设置</NDivider>
         <NFormItem label="默认笔记位置">
@@ -687,6 +817,65 @@ onUnmounted(() => {
 .notes-location-path:hover {
   background-color: v-bind('themeVars.hoverColor');
   color: v-bind('themeVars.primaryColor');
+}
+
+.launcher-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.launcher-help,
+.launcher-empty {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.launcher-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid v-bind('themeVars.dividerColor');
+  border-radius: 8px;
+}
+
+.launcher-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.launcher-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.launcher-icon-empty {
+  display: inline-block;
+  border-radius: 4px;
+  background: v-bind('themeVars.dividerColor');
+}
+
+.launcher-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.launcher-path {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launcher-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 /* 全局 message 样式调整 - 调整到垂直中间 */
