@@ -13,6 +13,12 @@
 - 快捷指令系统
 - 远程桌面快捷方式
 
+## [0.7.2] - 2026-10-23
+
+### Fixed
+
+- 🐛 **自动发布**：修正发布说明脚本被截断的问题，让打包流程可以继续执行
+
 ## [0.7.1] - 2026-10-23
 
 ### Fixed
@@ -295,7 +301,8 @@
 
 ---
 
-[Unreleased]: https://github.com/yourusername/ytools/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/yourusername/ytools/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/yourusername/ytools/releases/tag/v0.7.2
 [0.7.1]: https://github.com/yourusername/ytools/releases/tag/v0.7.1
 [0.7.0]: https://github.com/yourusername/ytools/releases/tag/v0.7.0
 [0.6.0]: https://github.com/yourusername/ytools/releases/tag/v0.6.0

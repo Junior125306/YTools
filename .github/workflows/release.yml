@@ -58,25 +58,25 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # 从 CHANGELOG.md 提取当前版本的发布说明
-          NOTES=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | \
-            sed '/## \['"$VERSION"'\]/d' | \
-            sed '/## \[/,$d' | \
-            sed '/^$/N;/^\n$/D')
+          # 从当前版本标题取到下一个版本标题，不包含标题行本身
+          NOTES=$(awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { capture = 1; next }
+            capture && $0 ~ "^## \\[" { exit }
+            capture { print }
+          ' CHANGELOG.md)
 
           if [ -z "$NOTES" ]; then
             NOTES="Release $VERSION"
           fi
 
-          NOTES="${NOTES}
-
----
-
-查看完整变更日志: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)"
-
+          REPO="${{ github.repository }}"
           {
             echo "NOTES<<RELEASE_NOTES_EOF"
             echo "$NOTES"
+            echo ""
+            echo "---"
+            echo ""
+            echo "查看完整变更日志: [CHANGELOG.md](https://github.com/${REPO}/blob/main/CHANGELOG.md)"
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
